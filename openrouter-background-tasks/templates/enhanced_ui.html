@@ -1,0 +1,1502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Minimal AI Chat - True Parallel Processing</title>
+    <link href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
+    <style>
+        :root {
+            --background: oklch(1.0000 0 0);
+            --foreground: oklch(0.1448 0 0);
+            --card: oklch(1.0000 0 0);
+            --card-foreground: oklch(0.1448 0 0);
+            --popover: oklch(1.0000 0 0);
+            --popover-foreground: oklch(0.1448 0 0);
+            --primary: oklch(0.5555 0 0);
+            --primary-foreground: oklch(0.9851 0 0);
+            --secondary: oklch(0.9702 0 0);
+            --secondary-foreground: oklch(0.2046 0 0);
+            --muted: oklch(0.9702 0 0);
+            --muted-foreground: oklch(0.5486 0 0);
+            --accent: oklch(0.9702 0 0);
+            --accent-foreground: oklch(0.2046 0 0);
+            --destructive: oklch(0.5830 0.2387 28.4765);
+            --destructive-foreground: oklch(0.9702 0 0);
+            --border: oklch(0.9219 0 0);
+            --input: oklch(0.9219 0 0);
+            --ring: oklch(0.7090 0 0);
+            --font-sans: 'Geist Mono', monospace;
+            --font-mono: 'Geist Mono', monospace;
+            --radius: 0rem;
+            --shadow: none;
+            --spacing: 0.25rem;
+        }
+
+        .dark {
+            --background: oklch(0.1448 0 0);
+            --foreground: oklch(0.9851 0 0);
+            --card: oklch(0.2134 0 0);
+            --card-foreground: oklch(0.9851 0 0);
+            --popover: oklch(0.2686 0 0);
+            --popover-foreground: oklch(0.9851 0 0);
+            --primary: oklch(0.5555 0 0);
+            --primary-foreground: oklch(0.9851 0 0);
+            --secondary: oklch(0.2686 0 0);
+            --secondary-foreground: oklch(0.9851 0 0);
+            --muted: oklch(0.2686 0 0);
+            --muted-foreground: oklch(0.7090 0 0);
+            --accent: oklch(0.3715 0 0);
+            --accent-foreground: oklch(0.9851 0 0);
+            --destructive: oklch(0.7022 0.1892 22.2279);
+            --destructive-foreground: oklch(0.2686 0 0);
+            --border: oklch(0.3407 0 0);
+            --input: oklch(0.4386 0 0);
+            --ring: oklch(0.5555 0 0);
+            --sidebar: oklch(0.2046 0 0);
+            --sidebar-foreground: oklch(0.9851 0 0);
+        }
+
+        * {
+            box-sizing: border-box;
+            scrollbar-width: thin;
+            scrollbar-color: var(--border) transparent;
+        }
+
+        *::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        *::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        *::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 3px;
+        }
+
+        body {
+            font-family: var(--font-mono);
+            background: var(--background);
+            color: var(--foreground);
+            margin: 0;
+            padding: 0;
+            line-height: 1.6;
+        }
+
+        .chat-container {
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: var(--sidebar, var(--background));
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.3s ease-out;
+        }
+
+        .sidebar.collapsed {
+            transform: translateX(-100%);
+            margin-right: -280px;
+        }
+
+        .main-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .chat-header {
+            padding: 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            background: var(--background);
+        }
+
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .chat-input-area {
+            padding: 1rem;
+            border-top: 1px solid var(--border);
+            background: var(--background);
+        }
+
+        .chat-item {
+            padding: 0.75rem;
+            margin: 0.5rem;
+            border: 1px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s ease-out;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .chat-item:hover {
+            background: var(--accent);
+            transform: translateX(2px);
+        }
+
+        .chat-item.active {
+            background: var(--primary);
+            color: var(--primary-foreground);
+            border-color: var(--primary);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 0.5rem;
+            transition: all 0.3s ease;
+        }
+
+        .status-idle { 
+            background: var(--muted-foreground); 
+        }
+        
+        .status-processing { 
+            background: var(--primary);
+            animation: pulse 1.5s infinite;
+        }
+        
+        .status-complete { 
+            background: #22c55e; 
+        }
+        
+        .status-error { 
+            background: var(--destructive); 
+        }
+
+        @keyframes pulse {
+            0%, 100% { 
+                opacity: 1;
+                transform: scale(1);
+            }
+            50% { 
+                opacity: 0.6;
+                transform: scale(1.2);
+            }
+        }
+
+        .message {
+            animation: fadeInUp 0.3s ease-out;
+            max-width: 85%;
+        }
+
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .message.user {
+            align-self: flex-end;
+            background: var(--accent);
+            padding: 0.75rem 1rem;
+            margin-left: 2rem;
+        }
+
+        .message.ai {
+            align-self: flex-start;
+            background: var(--card);
+            border: 1px solid var(--border);
+            padding: 0.75rem 1rem;
+            margin-right: 2rem;
+        }
+
+        .reasoning-box {
+            background: var(--muted);
+            border: 1px solid var(--primary);
+            padding: 1rem;
+            margin: 1rem 0;
+            font-size: 0.875rem;
+            position: relative;
+            overflow: hidden;
+            animation: reasoningGlow 2s ease-in-out infinite;
+        }
+
+        @keyframes reasoningGlow {
+            0%, 100% { 
+                border-color: var(--primary);
+                opacity: 0.9;
+            }
+            50% { 
+                border-color: var(--ring);
+                opacity: 1;
+            }
+        }
+
+        .reasoning-content {
+            max-height: 200px;
+            overflow-y: auto;
+            font-size: 0.813rem;
+            line-height: 1.4;
+            color: var(--muted-foreground);
+            font-family: var(--font-mono);
+        }
+
+        .token-count {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            margin-top: 0.5rem;
+            font-family: var(--font-mono);
+        }
+
+        .timer {
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            font-family: var(--font-mono);
+            font-variant-numeric: tabular-nums;
+        }
+
+        .new-chat-btn {
+            background: var(--primary);
+            color: var(--primary-foreground);
+            border: none;
+            padding: 0.75rem 1rem;
+            margin: 1rem;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-weight: 500;
+            transition: all 0.15s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 0.5rem;
+        }
+
+        .new-chat-btn:hover {
+            transform: scale(1.02);
+            opacity: 0.9;
+        }
+
+        .new-chat-btn:active {
+            transform: scale(0.98);
+        }
+
+        .model-selector {
+            background: var(--background);
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            font-family: var(--font-mono);
+            color: var(--foreground);
+            cursor: pointer;
+            transition: border-color 0.2s;
+        }
+
+        .model-selector:hover {
+            border-color: var(--ring);
+        }
+
+        .input-area {
+            display: flex;
+            gap: 0.5rem;
+            align-items: flex-end;
+        }
+
+        .message-input {
+            flex: 1;
+            background: var(--input);
+            border: 1px solid var(--border);
+            padding: 0.75rem;
+            font-family: var(--font-mono);
+            color: var(--foreground);
+            resize: vertical;
+            min-height: 2.5rem;
+            max-height: 200px;
+            transition: border-color 0.2s ease-out;
+        }
+
+        .message-input:focus {
+            outline: none;
+            border-color: var(--ring);
+        }
+
+        .send-btn {
+            background: var(--primary);
+            color: var(--primary-foreground);
+            border: none;
+            padding: 0.75rem 1rem;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            transition: all 0.1s ease-out;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .send-btn:hover:not(:disabled) {
+            transform: scale(1.05);
+            opacity: 0.9;
+        }
+
+        .send-btn:active:not(:disabled) {
+            transform: scale(0.95);
+        }
+
+        .send-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .status-bar {
+            background: var(--card);
+            border-top: 1px solid var(--border);
+            padding: 0.5rem 1rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-size: 0.75rem;
+            color: var(--muted-foreground);
+            font-family: var(--font-mono);
+        }
+
+        .spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--muted);
+            border-top: 2px solid var(--primary);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .typing-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+            padding: 0 0.5rem;
+        }
+
+        .typing-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            background: var(--primary);
+            animation: typingAnimation 1.4s infinite ease-in-out;
+        }
+
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+        @keyframes typingAnimation {
+            0%, 60%, 100% { 
+                transform: translateY(0); 
+                opacity: 0.4; 
+            }
+            30% { 
+                transform: translateY(-8px); 
+                opacity: 1; 
+            }
+        }
+
+        .settings-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            width: 320px;
+            height: 100vh;
+            background: var(--card);
+            border-left: 1px solid var(--border);
+            transform: translateX(100%);
+            transition: transform 0.3s ease-out;
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .settings-panel.open {
+            transform: translateX(0);
+        }
+
+        .settings-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 1.5rem;
+        }
+
+        .settings-group {
+            margin-bottom: 2rem;
+        }
+
+        .settings-group h4 {
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--foreground);
+        }
+
+        .settings-item {
+            margin-bottom: 1rem;
+        }
+
+        .settings-item label {
+            display: block;
+            font-size: 0.875rem;
+            color: var(--muted-foreground);
+            margin-bottom: 0.25rem;
+        }
+
+        .settings-item input[type="text"],
+        .settings-item input[type="password"] {
+            width: 100%;
+            background: var(--input);
+            border: 1px solid var(--border);
+            padding: 0.5rem;
+            font-family: var(--font-mono);
+            color: var(--foreground);
+        }
+
+        .settings-item input[type="checkbox"] {
+            margin-right: 0.5rem;
+        }
+
+        .btn {
+            padding: 0.5rem 1rem;
+            border: none;
+            font-family: var(--font-mono);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary {
+            background: var(--primary);
+            color: var(--primary-foreground);
+        }
+
+        .btn-secondary {
+            background: var(--secondary);
+            color: var(--secondary-foreground);
+            border: 1px solid var(--border);
+        }
+
+        .btn:hover {
+            opacity: 0.8;
+            transform: translateY(-1px);
+        }
+
+        @media (max-width: 768px) {
+            .sidebar {
+                position: fixed;
+                left: 0;
+                top: 0;
+                height: 100vh;
+                z-index: 100;
+                box-shadow: 2px 0 10px rgba(0,0,0,0.1);
+            }
+
+            .sidebar.collapsed {
+                transform: translateX(-100%);
+                margin-right: 0;
+            }
+
+            .message.user {
+                margin-left: 1rem;
+            }
+
+            .message.ai {
+                margin-right: 1rem;
+            }
+
+            .settings-panel {
+                width: 100%;
+            }
+        }
+
+        .error-message {
+            background: var(--destructive);
+            color: var(--destructive-foreground);
+            padding: 0.75rem 1rem;
+            border-radius: var(--radius);
+            margin: 0.5rem 0;
+            font-size: 0.875rem;
+        }
+
+        .cost-display {
+            font-family: var(--font-mono);
+            font-size: 0.875rem;
+            color: var(--primary);
+            font-weight: 600;
+        }
+
+        .cancel-btn {
+            background: var(--destructive);
+            color: var(--destructive-foreground);
+            border: none;
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        .cancel-btn:hover {
+            opacity: 0.8;
+        }
+
+        /* Loading states */
+        .skeleton {
+            background: linear-gradient(90deg, var(--muted) 25%, var(--border) 50%, var(--muted) 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
+        }
+    </style>
+</head>
+<body>
+    <div class="chat-container">
+        <!-- Sidebar -->
+        <div id="sidebar" class="sidebar">
+            <button class="new-chat-btn" onclick="createNewChat()">
+                <i data-lucide="plus"></i> New Chat
+            </button>
+            
+            <div class="px-4 py-2">
+                <div class="text-sm font-medium mb-2">Active Chats (<span id="active-count">0</span>)</div>
+            </div>
+            
+            <div id="chat-list" class="flex-1 overflow-y-auto">
+                <!-- Chat items will be dynamically populated -->
+            </div>
+            
+            <div class="p-4 border-t" style="border-color: var(--border);">
+                <button class="text-xs px-2 py-1" style="border: 1px solid var(--border); color: var(--foreground);" onclick="clearAllChats()">
+                    Clear All
+                </button>
+                <button class="text-xs px-2 py-1 ml-2" style="border: 1px solid var(--border); color: var(--foreground);" onclick="openSettings()">
+                    Settings
+                </button>
+            </div>
+        </div>
+        
+        <!-- Main Chat Area -->
+        <div class="main-area">
+            <!-- Chat Header -->
+            <div class="chat-header">
+                <div class="flex items-center gap-4">
+                    <button id="menu-toggle" class="p-2" style="border: 1px solid var(--border);" onclick="toggleSidebar()">
+                        <i data-lucide="menu" class="w-4 h-4"></i>
+                    </button>
+                    
+                    <select id="model-selector" class="model-selector" onchange="updateCurrentModel()">
+                        <option value="openai/o3-pro">o3 Pro (Max)</option>
+                        <option value="openai/o3">o3 (Max)</option>
+                        <option value="x-ai/grok-4">Grok 4 (Max)</option>
+                    </select>
+                    
+                    <div class="flex items-center gap-2">
+                        <span id="active-tasks-indicator" class="text-xs px-2 py-1" style="background: var(--accent); display: none;">
+                            <span id="active-tasks-count">0</span> active
+                        </span>
+                        <div id="global-timer" class="timer" style="display: none;">Timer: <span id="global-timer-value">00:00</span></div>
+                    </div>
+                </div>
+                
+                <div class="flex items-center gap-2">
+                    <button onclick="openSettings()" class="p-2" style="border: 1px solid var(--border);">
+                        <i data-lucide="settings" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="toggleDarkMode()" class="p-2" style="border: 1px solid var(--border);">
+                        <i data-lucide="moon" class="w-4 h-4"></i>
+                    </button>
+                </div>
+            </div>
+            
+            <!-- Chat Messages -->
+            <div id="chat-messages" class="chat-messages">
+                <div class="text-center py-8" style="color: var(--muted-foreground);">
+                    <div class="text-lg mb-2 font-mono">AI</div>
+                    <p class="font-semibold mb-1">Minimal AI Chat Interface</p>
+                    <p class="text-sm">True parallel processing with o3 Pro, o3, and Grok 4</p>
+                    <p class="text-xs mt-2">Start a new chat or select an existing one</p>
+                </div>
+            </div>
+            
+            <!-- Input Area -->
+            <div class="chat-input-area">
+                <div class="input-area">
+                    <textarea 
+                        id="message-input" 
+                        class="message-input" 
+                        placeholder="Type your message..."
+                        rows="1"
+                        onkeydown="handleInputKeydown(event)"
+                    ></textarea>
+                    <button id="send-btn" class="send-btn" onclick="sendMessage()">
+                        <i data-lucide="send" class="w-4 h-4"></i>
+                    </button>
+                </div>
+                <div class="flex items-center justify-between mt-2 text-xs" style="color: var(--muted-foreground);">
+                    <span id="ready-indicator">Ready for parallel sessions</span>
+                    <span>Press Enter to send, Shift+Enter for new line</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Status Bar -->
+    <div class="status-bar">
+        <div>
+            Total Active: <span id="total-active">0</span> | 
+            Processing: <span id="processing-count">0</span> | 
+            Queue: <span id="queue-count">0</span> |
+            Cost: <span class="cost-display">$<span id="total-cost">0.00</span></span>
+        </div>
+        <div class="text-xs">
+            <span id="connection-status">Connected</span>
+        </div>
+    </div>
+
+    <!-- Settings Panel -->
+    <div id="settings-panel" class="settings-panel">
+        <div class="p-4 border-b" style="border-color: var(--border);">
+            <div class="flex items-center justify-between">
+                <h3 class="text-lg font-semibold">Settings</h3>
+                <button onclick="closeSettings()" class="p-2" style="border: 1px solid var(--border);">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+        </div>
+        
+        <div class="settings-content">
+            <div class="settings-group">
+                <h4>API Configuration</h4>
+                <div class="settings-item">
+                    <label>API Key</label>
+                    <input type="password" id="api-key" placeholder="sk-or-..." />
+                </div>
+                <div class="settings-item">
+                    <label>Base URL (Optional)</label>
+                    <input type="text" id="base-url" placeholder="Leave empty for default" />
+                </div>
+                <button class="btn btn-primary w-full" onclick="updateAPIConfig()">
+                    Update Configuration
+                </button>
+            </div>
+            
+            <div class="settings-group">
+                <h4>Display Options</h4>
+                <div class="settings-item">
+                    <label>
+                        <input type="checkbox" id="show-reasoning" checked />
+                        Show reasoning process
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <label>
+                        <input type="checkbox" id="show-tokens" checked />
+                        Show token counts
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <label>
+                        <input type="checkbox" id="show-costs" checked />
+                        Show cost estimates
+                    </label>
+                </div>
+                <div class="settings-item">
+                    <label>
+                        <input type="checkbox" id="auto-scroll" checked />
+                        Auto-scroll to new messages
+                    </label>
+                </div>
+            </div>
+            
+            <div class="settings-group">
+                <h4>Reasoning Configuration</h4>
+                <div class="settings-item">
+                    <label>Reasoning Effort</label>
+                    <select id="reasoning-effort" style="width: 100%; background: var(--input); border: 1px solid var(--border); padding: 0.5rem; color: var(--foreground);">
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high" selected>High (Maximum)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Initialize Lucide icons
+        lucide.createIcons();
+        
+        // Global state
+        let ws = null;
+        let chats = new Map();
+        let currentChatId = null;
+        let chatCounter = 0;
+        let activeTasks = new Map();
+        let totalCost = 0;
+        let isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        
+        // Apply dark mode on load
+        if (isDarkMode) {
+            document.documentElement.classList.add('dark');
+        }
+        
+        // Initialize WebSocket
+        function initWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                updateConnectionStatus(true);
+            };
+            
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                handleWebSocketMessage(data);
+            };
+            
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                updateConnectionStatus(false);
+                setTimeout(initWebSocket, 3000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+                updateConnectionStatus(false);
+            };
+        }
+        
+        // Handle WebSocket messages
+        function handleWebSocketMessage(data) {
+            const taskId = data.task_id;
+            
+            switch(data.type) {
+                case 'reasoning_start':
+                    createReasoningDisplay(taskId, data);
+                    break;
+                case 'reasoning_stream':
+                    updateReasoningStream(taskId, data.content);
+                    break;
+                case 'reasoning_tokens':
+                    updateReasoningTokens(taskId, data.tokens);
+                    break;
+                case 'reasoning_complete':
+                    completeReasoningDisplay(taskId);
+                    if (data.response) {
+                        addAIMessage(taskId, data.response, data);
+                    }
+                    break;
+                case 'task_complete':
+                    handleTaskComplete(taskId, data);
+                    break;
+                case 'task_cancelled':
+                    handleTaskCancelled(taskId);
+                    break;
+                case 'error':
+                    handleError(taskId, data.message);
+                    break;
+            }
+        }
+        
+        // Chat management
+        function createNewChat() {
+            const chatId = `chat_${++chatCounter}`;
+            const model = document.getElementById('model-selector').value;
+            
+            const chat = {
+                id: chatId,
+                model: model,
+                messages: [],
+                status: 'idle',
+                tokenCount: 0,
+                reasoningTokens: 0,
+                totalTime: 0,
+                cost: 0,
+                created: new Date(),
+                taskIds: new Set()
+            };
+            
+            chats.set(chatId, chat);
+            currentChatId = chatId;
+            
+            updateChatList();
+            renderMessages();
+            updateChatHeader();
+            
+            // Focus input
+            document.getElementById('message-input').focus();
+        }
+        
+        function selectChat(chatId) {
+            currentChatId = chatId;
+            updateChatList();
+            renderMessages();
+            updateChatHeader();
+        }
+        
+        function updateChatList() {
+            const chatList = document.getElementById('chat-list');
+            chatList.innerHTML = '';
+            
+            let activeCount = 0;
+            
+            chats.forEach((chat, chatId) => {
+                const isActive = chatId === currentChatId;
+                const hasActiveTasks = chat.taskIds.size > 0;
+                if (hasActiveTasks) activeCount++;
+                
+                const chatItem = document.createElement('div');
+                chatItem.className = `chat-item ${isActive ? 'active' : ''}`;
+                chatItem.onclick = () => selectChat(chatId);
+                
+                const modelName = chat.model.split('/')[1];
+                const statusClass = hasActiveTasks ? 'status-processing' : 'status-idle';
+                
+                chatItem.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-sm font-medium">${modelName}</span>
+                        <button onclick="event.stopPropagation(); deleteChat('${chatId}')" 
+                                style="opacity: 0.5; hover:opacity: 1;">×</button>
+                    </div>
+                    <div class="flex items-center gap-2 text-xs">
+                        <span class="status-indicator ${statusClass}"></span>
+                        <span style="color: var(--muted-foreground);">
+                            ${hasActiveTasks ? 'Processing' : 'Ready'}
+                        </span>
+                    </div>
+                    <div class="text-xs" style="color: var(--muted-foreground); margin-top: 0.25rem;">
+                        ${chat.tokenCount} tokens • $${chat.cost.toFixed(4)}
+                    </div>
+                `;
+                
+                chatList.appendChild(chatItem);
+            });
+            
+            document.getElementById('active-count').textContent = activeCount;
+            updateActiveTasksIndicator();
+        }
+        
+        function deleteChat(chatId) {
+            const chat = chats.get(chatId);
+            if (chat) {
+                // Cancel all active tasks
+                chat.taskIds.forEach(taskId => {
+                    cancelTask(taskId);
+                });
+                
+                chats.delete(chatId);
+                
+                if (currentChatId === chatId) {
+                    currentChatId = chats.size > 0 ? Array.from(chats.keys())[0] : null;
+                }
+                
+                updateChatList();
+                renderMessages();
+            }
+        }
+        
+        function clearAllChats() {
+            if (confirm('Clear all chats? This will cancel any active tasks.')) {
+                // Cancel all active tasks
+                activeTasks.forEach((task, taskId) => {
+                    cancelTask(taskId);
+                });
+                
+                chats.clear();
+                currentChatId = null;
+                chatCounter = 0;
+                totalCost = 0;
+                
+                updateChatList();
+                renderMessages();
+                updateTotalCost();
+            }
+        }
+        
+        // Message handling
+        async function sendMessage() {
+            const input = document.getElementById('message-input');
+            const sendBtn = document.getElementById('send-btn');
+            const content = input.value.trim();
+            
+            if (!content) return;
+            
+            if (!currentChatId) {
+                createNewChat();
+            }
+            
+            const chat = chats.get(currentChatId);
+            if (!chat) return;
+            
+            // Disable send button temporarily
+            sendBtn.disabled = true;
+            sendBtn.innerHTML = '<div class="spinner"></div>';
+            
+            try {
+                // Add user message
+                const userMessage = {
+                    role: 'user',
+                    content: content,
+                    timestamp: new Date()
+                };
+                
+                chat.messages.push(userMessage);
+                input.value = '';
+                adjustTextareaHeight();
+                renderMessages();
+                
+                // Prepare messages for API
+                const messages = chat.messages.map(m => ({
+                    role: m.role,
+                    content: m.content
+                }));
+                
+                // Send to backend
+                const response = await fetch('/responses', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: chat.model,
+                        input: messages,
+                        background: true,
+                        reasoning: {
+                            effort: document.getElementById('reasoning-effort')?.value || 'high',
+                            summary: 'auto'
+                        }
+                    })
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`API Error: ${response.status}`);
+                }
+                
+                const task = await response.json();
+                console.log('Task created:', task);
+                
+                // Track task
+                activeTasks.set(task.id, {
+                    chatId: currentChatId,
+                    startTime: Date.now(),
+                    model: chat.model
+                });
+                
+                chat.taskIds.add(task.id);
+                updateChatList();
+                updateActiveTasksIndicator();
+                
+                // Start polling
+                pollTaskStatus(task.id);
+                
+            } catch (error) {
+                console.error('Error sending message:', error);
+                showError(`Failed to send message: ${error.message}`);
+            } finally {
+                sendBtn.disabled = false;
+                sendBtn.innerHTML = '<i data-lucide="send" class="w-4 h-4"></i>';
+                lucide.createIcons();
+                input.focus();
+            }
+        }
+        
+        // Reasoning display
+        function createReasoningDisplay(taskId, data) {
+            const task = activeTasks.get(taskId);
+            if (!task) return;
+            
+            const chat = chats.get(task.chatId);
+            if (!chat || task.chatId !== currentChatId) return;
+            
+            const reasoningDiv = document.createElement('div');
+            reasoningDiv.id = `reasoning-${taskId}`;
+            reasoningDiv.className = 'message ai';
+            reasoningDiv.innerHTML = `
+                <div class="reasoning-box">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-2">
+                            <div class="typing-indicator">
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                                <div class="typing-dot"></div>
+                            </div>
+                            <span class="text-sm font-medium">Reasoning...</span>
+                        </div>
+                        <div class="flex items-center gap-3 text-xs">
+                            <span class="timer" id="timer-${taskId}">00:00</span>
+                            <button class="cancel-btn" onclick="cancelTask('${taskId}')">Cancel</button>
+                        </div>
+                    </div>
+                    <div class="reasoning-content" id="reasoning-content-${taskId}">
+                        <div style="color: var(--muted-foreground);">Initializing deep reasoning...</div>
+                    </div>
+                    <div class="token-count" id="reasoning-tokens-${taskId}">
+                        Reasoning tokens: 0
+                    </div>
+                </div>
+            `;
+            
+            const messagesArea = document.getElementById('chat-messages');
+            messagesArea.appendChild(reasoningDiv);
+            
+            if (document.getElementById('auto-scroll')?.checked !== false) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
+            
+            // Start timer
+            task.timerInterval = setInterval(() => {
+                updateTaskTimer(taskId);
+            }, 1000);
+        }
+        
+        function updateReasoningStream(taskId, content) {
+            const contentEl = document.getElementById(`reasoning-content-${taskId}`);
+            if (contentEl && document.getElementById('show-reasoning')?.checked !== false) {
+                const line = document.createElement('div');
+                line.style.marginBottom = '0.25rem';
+                line.textContent = content;
+                contentEl.appendChild(line);
+                
+                // Keep scrolled to bottom
+                contentEl.scrollTop = contentEl.scrollHeight;
+            }
+        }
+        
+        function updateReasoningTokens(taskId, tokens) {
+            const tokensEl = document.getElementById(`reasoning-tokens-${taskId}`);
+            if (tokensEl && document.getElementById('show-tokens')?.checked !== false) {
+                const cost = calculateTokenCost(tokens, 'reasoning');
+                tokensEl.innerHTML = `Reasoning tokens: ${tokens.toLocaleString()} • $${cost.toFixed(4)}`;
+            }
+        }
+        
+        function completeReasoningDisplay(taskId) {
+            const reasoningEl = document.getElementById(`reasoning-${taskId}`);
+            if (reasoningEl) {
+                reasoningEl.remove();
+            }
+            
+            const task = activeTasks.get(taskId);
+            if (task && task.timerInterval) {
+                clearInterval(task.timerInterval);
+            }
+        }
+        
+        // Task handling
+        async function pollTaskStatus(taskId) {
+            try {
+                const response = await fetch(`/responses/${taskId}`);
+                if (!response.ok) throw new Error('Failed to fetch task status');
+                
+                const taskData = await response.json();
+                
+                if (taskData.status === 'in_progress' || taskData.status === 'queued') {
+                    // Continue polling
+                    setTimeout(() => pollTaskStatus(taskId), 2000);
+                } else if (taskData.status === 'completed') {
+                    handleTaskComplete(taskId, taskData);
+                } else if (taskData.status === 'failed') {
+                    handleTaskFailed(taskId, taskData);
+                }
+            } catch (error) {
+                console.error('Error polling task:', error);
+                handleTaskFailed(taskId, { error: error.message });
+            }
+        }
+        
+        function handleTaskComplete(taskId, data) {
+            const task = activeTasks.get(taskId);
+            if (!task) return;
+            
+            const chat = chats.get(task.chatId);
+            if (!chat) return;
+            
+            // Clean up reasoning display
+            completeReasoningDisplay(taskId);
+            
+            // Add AI message
+            if (data.output_text) {
+                const aiMessage = {
+                    role: 'assistant',
+                    content: data.output_text,
+                    timestamp: new Date(),
+                    tokens: {
+                        input: data.input_tokens || 0,
+                        reasoning: data.reasoning_tokens || 0,
+                        output: data.output_tokens || 0
+                    },
+                    cost: data.cost || 0,
+                    duration: (Date.now() - task.startTime) / 1000
+                };
+                
+                chat.messages.push(aiMessage);
+                chat.tokenCount += (aiMessage.tokens.input + aiMessage.tokens.reasoning + aiMessage.tokens.output);
+                chat.reasoningTokens += aiMessage.tokens.reasoning;
+                chat.cost += aiMessage.cost;
+                totalCost += aiMessage.cost;
+                
+                if (task.chatId === currentChatId) {
+                    addAIMessageElement(aiMessage);
+                }
+                
+                updateChatList();
+                updateTotalCost();
+            }
+            
+            // Clean up
+            chat.taskIds.delete(taskId);
+            activeTasks.delete(taskId);
+            updateActiveTasksIndicator();
+        }
+        
+        function handleTaskFailed(taskId, data) {
+            const task = activeTasks.get(taskId);
+            if (!task) return;
+            
+            completeReasoningDisplay(taskId);
+            
+            if (task.chatId === currentChatId) {
+                showError(data.error || 'Task failed');
+            }
+            
+            const chat = chats.get(task.chatId);
+            if (chat) {
+                chat.taskIds.delete(taskId);
+            }
+            
+            activeTasks.delete(taskId);
+            updateActiveTasksIndicator();
+            updateChatList();
+        }
+        
+        function handleTaskCancelled(taskId) {
+            const task = activeTasks.get(taskId);
+            if (!task) return;
+            
+            completeReasoningDisplay(taskId);
+            
+            const chat = chats.get(task.chatId);
+            if (chat) {
+                chat.taskIds.delete(taskId);
+            }
+            
+            activeTasks.delete(taskId);
+            updateActiveTasksIndicator();
+            updateChatList();
+        }
+        
+        async function cancelTask(taskId) {
+            try {
+                await fetch(`/responses/${taskId}/cancel`, { method: 'POST' });
+                handleTaskCancelled(taskId);
+            } catch (error) {
+                console.error('Error cancelling task:', error);
+            }
+        }
+        
+        // UI Updates
+        function renderMessages() {
+            const messagesArea = document.getElementById('chat-messages');
+            
+            if (!currentChatId || !chats.has(currentChatId)) {
+                messagesArea.innerHTML = `
+                    <div class="text-center py-8" style="color: var(--muted-foreground);">
+                        <div class="text-lg mb-2 font-mono">AI</div>
+                        <p class="font-semibold mb-1">Minimal AI Chat Interface</p>
+                        <p class="text-sm">True parallel processing with o3 Pro, o3, and Grok 4</p>
+                        <p class="text-xs mt-2">Start a new chat or select an existing one</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const chat = chats.get(currentChatId);
+            messagesArea.innerHTML = '';
+            
+            chat.messages.forEach(message => {
+                if (message.role === 'user') {
+                    addUserMessageElement(message);
+                } else {
+                    addAIMessageElement(message);
+                }
+            });
+            
+            // Re-create active reasoning displays
+            activeTasks.forEach((task, taskId) => {
+                if (task.chatId === currentChatId) {
+                    createReasoningDisplay(taskId, {});
+                }
+            });
+        }
+        
+        function addUserMessageElement(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message user';
+            messageDiv.innerHTML = `
+                <div>${message.content.replace(/\n/g, '<br>')}</div>
+                <div class="text-xs" style="color: var(--muted-foreground); margin-top: 0.25rem;">
+                    ${formatTime(message.timestamp)}
+                </div>
+            `;
+            document.getElementById('chat-messages').appendChild(messageDiv);
+        }
+        
+        function addAIMessageElement(message) {
+            const messageDiv = document.createElement('div');
+            messageDiv.className = 'message ai';
+            
+            let tokensInfo = '';
+            if (message.tokens && document.getElementById('show-tokens')?.checked !== false) {
+                tokensInfo = `
+                    <div class="token-count">
+                        Input: ${message.tokens.input} • 
+                        Reasoning: ${message.tokens.reasoning} • 
+                        Output: ${message.tokens.output}
+                    </div>
+                `;
+            }
+            
+            let costInfo = '';
+            if (message.cost && document.getElementById('show-costs')?.checked !== false) {
+                costInfo = `<span>• $${message.cost.toFixed(4)}</span>`;
+            }
+            
+            let durationInfo = '';
+            if (message.duration) {
+                durationInfo = `<span>• ${message.duration.toFixed(1)}s</span>`;
+            }
+            
+            messageDiv.innerHTML = `
+                <div>${message.content.replace(/\n/g, '<br>')}</div>
+                ${tokensInfo}
+                <div class="text-xs" style="color: var(--muted-foreground); margin-top: 0.25rem;">
+                    ${formatTime(message.timestamp)} ${costInfo} ${durationInfo}
+                </div>
+            `;
+            
+            const messagesArea = document.getElementById('chat-messages');
+            messagesArea.appendChild(messageDiv);
+            
+            if (document.getElementById('auto-scroll')?.checked !== false) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.createElement('div');
+            errorDiv.className = 'error-message';
+            errorDiv.textContent = message;
+            
+            const messagesArea = document.getElementById('chat-messages');
+            messagesArea.appendChild(errorDiv);
+            
+            if (document.getElementById('auto-scroll')?.checked !== false) {
+                messagesArea.scrollTop = messagesArea.scrollHeight;
+            }
+        }
+        
+        function updateChatHeader() {
+            if (currentChatId && chats.has(currentChatId)) {
+                const chat = chats.get(currentChatId);
+                document.getElementById('model-selector').value = chat.model;
+            }
+        }
+        
+        function updateCurrentModel() {
+            if (currentChatId && chats.has(currentChatId)) {
+                const chat = chats.get(currentChatId);
+                chat.model = document.getElementById('model-selector').value;
+            }
+        }
+        
+        function updateActiveTasksIndicator() {
+            const indicator = document.getElementById('active-tasks-indicator');
+            const count = activeTasks.size;
+            
+            if (count > 0) {
+                indicator.style.display = 'inline-block';
+                document.getElementById('active-tasks-count').textContent = count;
+                document.getElementById('global-timer').style.display = 'inline-block';
+            } else {
+                indicator.style.display = 'none';
+                document.getElementById('global-timer').style.display = 'none';
+            }
+            
+            document.getElementById('total-active').textContent = count;
+            document.getElementById('processing-count').textContent = count;
+        }
+        
+        function updateTaskTimer(taskId) {
+            const task = activeTasks.get(taskId);
+            if (!task) return;
+            
+            const elapsed = Math.floor((Date.now() - task.startTime) / 1000);
+            const minutes = Math.floor(elapsed / 60);
+            const seconds = elapsed % 60;
+            const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
+            
+            const timerEl = document.getElementById(`timer-${taskId}`);
+            if (timerEl) {
+                timerEl.textContent = timeStr;
+            }
+            
+            // Update global timer with longest running task
+            if (activeTasks.size > 0) {
+                let maxElapsed = 0;
+                activeTasks.forEach(t => {
+                    const e = Math.floor((Date.now() - t.startTime) / 1000);
+                    if (e > maxElapsed) maxElapsed = e;
+                });
+                
+                const m = Math.floor(maxElapsed / 60);
+                const s = maxElapsed % 60;
+                document.getElementById('global-timer-value').textContent = 
+                    `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+            }
+        }
+        
+        function updateTotalCost() {
+            document.getElementById('total-cost').textContent = totalCost.toFixed(4);
+        }
+        
+        function updateConnectionStatus(connected) {
+            const status = document.getElementById('connection-status');
+            if (connected) {
+                status.textContent = 'Connected';
+                status.style.color = '#22c55e';
+            } else {
+                status.textContent = 'Disconnected';
+                status.style.color = 'var(--destructive)';
+            }
+        }
+        
+        // Utility functions
+        function formatTime(date) {
+            return new Date(date).toLocaleTimeString('en-US', { 
+                hour: '2-digit', 
+                minute: '2-digit' 
+            });
+        }
+        
+        function calculateTokenCost(tokens, type) {
+            // Rough cost estimates
+            const rates = {
+                input: 0.00003,
+                reasoning: 0.00003,
+                output: 0.00012
+            };
+            return tokens * (rates[type] || rates.input);
+        }
+        
+        function adjustTextareaHeight() {
+            const textarea = document.getElementById('message-input');
+            textarea.style.height = 'auto';
+            textarea.style.height = Math.min(textarea.scrollHeight, 200) + 'px';
+        }
+        
+        function handleInputKeydown(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        // Settings
+        function openSettings() {
+            document.getElementById('settings-panel').classList.add('open');
+        }
+        
+        function closeSettings() {
+            document.getElementById('settings-panel').classList.remove('open');
+        }
+        
+        async function updateAPIConfig() {
+            const apiKey = document.getElementById('api-key').value;
+            const baseUrl = document.getElementById('base-url').value;
+            
+            try {
+                const response = await fetch('/config/update', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        api_key: apiKey, 
+                        base_url: baseUrl || null 
+                    })
+                });
+                
+                if (response.ok) {
+                    alert('Configuration updated successfully!');
+                    closeSettings();
+                } else {
+                    throw new Error('Failed to update configuration');
+                }
+            } catch (error) {
+                alert('Error updating configuration: ' + error.message);
+            }
+        }
+        
+        // UI toggles
+        function toggleSidebar() {
+            document.getElementById('sidebar').classList.toggle('collapsed');
+        }
+        
+        function toggleDarkMode() {
+            isDarkMode = !isDarkMode;
+            document.documentElement.classList.toggle('dark', isDarkMode);
+            
+            const icon = document.querySelector('[data-lucide="moon"]').parentElement;
+            icon.innerHTML = isDarkMode ? 
+                '<i data-lucide="sun" class="w-4 h-4"></i>' : 
+                '<i data-lucide="moon" class="w-4 h-4"></i>';
+            lucide.createIcons();
+        }
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', () => {
+            // Try to init WebSocket
+            try {
+                initWebSocket();
+            } catch (error) {
+                console.log('WebSocket not available, using polling only');
+            }
+            
+            // Auto-resize textarea
+            document.getElementById('message-input').addEventListener('input', adjustTextareaHeight);
+            
+            // Update timers every second
+            setInterval(() => {
+                activeTasks.forEach((task, taskId) => {
+                    updateTaskTimer(taskId);
+                });
+            }, 1000);
+            
+            console.log('Minimal AI Chat Interface initialized');
+        });
+    </script>
+</body>
+</html>
