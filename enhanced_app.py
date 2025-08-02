@@ -9,28 +9,51 @@ import json
 import os
 import time
 import uuid
+from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from background_task_manager import BackgroundTaskManager, TaskStatus
 from providers import OpenRouterProvider
 import logging
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
 load_dotenv()
 
-app = FastAPI(title="Maximum Reasoning Lab - Enhanced")
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-templates = Jinja2Templates(directory=os.path.join(script_dir, "templates"))
+# Configure logging
+log_level = os.getenv("LOG_LEVEL", "INFO").upper()
+logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
+logger = logging.getLogger(__name__)
+
+# Global task manager and WebSocket connections
+task_manager: Optional[BackgroundTaskManager] = None
+active_connections: Set[WebSocket] = set()
 
 # Configuration
 API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL", "https://openrouter.ai/api/v1")
 
-# Global task manager and WebSocket connections
-task_manager: Optional[BackgroundTaskManager] = None
-active_connections: Set[WebSocket] = set()
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
+    global task_manager
+    if not API_KEY:
+        logger.warning("No OPENROUTER_API_KEY found in environment. Some features may not work properly.")
+        logger.info("To configure your API key, set the OPENROUTER_API_KEY environment variable or use the /config/update endpoint.")
+    # Create OpenRouter provider
+    provider = OpenRouterProvider(API_KEY, CUSTOM_BASE_URL)
+    # Create task manager with provider
+    task_manager = EnhancedTaskManager(provider, ws_manager)
+    await task_manager.start()
+    logger.info(f"Enhanced Maximum Reasoning Lab started with base URL: {CUSTOM_BASE_URL}")
+    
+    yield
+    
+    # Shutdown
+    if task_manager:
+        await task_manager.stop()
+
+app = FastAPI(title="Maximum Reasoning Lab - Enhanced", lifespan=lifespan)
+# Get the directory where this script is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+templates = Jinja2Templates(directory=os.path.join(script_dir, "templates"))
 
 class CreateResponseRequest(BaseModel):
     model: str = "openai/o3-pro"
@@ -85,24 +108,6 @@ class WebSocketManager:
 
 # Initialize WebSocket manager
 ws_manager = WebSocketManager()
-
-@app.on_event("startup")
-async def startup_event():
-    global task_manager
-    if not API_KEY:
-        logger.warning("No OPENROUTER_API_KEY found in environment")
-    # Create OpenRouter provider
-    provider = OpenRouterProvider(API_KEY, CUSTOM_BASE_URL)
-    # Create task manager with provider
-    task_manager = EnhancedTaskManager(provider, ws_manager)
-    await task_manager.start()
-    logger.info(f"Enhanced Maximum Reasoning Lab started with base URL: {CUSTOM_BASE_URL}")
-
-@app.on_event("shutdown")
-async def shutdown_event():
-    global task_manager
-    if task_manager:
-        await task_manager.stop()
 
 class EnhancedTaskManager(BackgroundTaskManager):
     def __init__(self, provider, ws_manager: WebSocketManager):
@@ -468,4 +473,5 @@ async def health_check():
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
