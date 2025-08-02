@@ -10,7 +10,8 @@ import os
 import time
 import uuid
 from dotenv import load_dotenv
-from background_task_manager import OpenRouterBackgroundTaskManager, TaskStatus
+from background_task_manager import BackgroundTaskManager, TaskStatus
+from providers import OpenRouterProvider
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -28,7 +29,7 @@ API_KEY = os.getenv("OPENROUTER_API_KEY", "")
 CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL", "https://openrouter.ai/api/v1")
 
 # Global task manager and WebSocket connections
-task_manager: Optional[OpenRouterBackgroundTaskManager] = None
+task_manager: Optional[BackgroundTaskManager] = None
 active_connections: Set[WebSocket] = set()
 
 class CreateResponseRequest(BaseModel):
@@ -90,7 +91,10 @@ async def startup_event():
     global task_manager
     if not API_KEY:
         logger.warning("No OPENROUTER_API_KEY found in environment")
-    task_manager = EnhancedTaskManager(API_KEY, CUSTOM_BASE_URL, ws_manager)
+    # Create OpenRouter provider
+    provider = OpenRouterProvider(API_KEY, CUSTOM_BASE_URL)
+    # Create task manager with provider
+    task_manager = EnhancedTaskManager(provider, ws_manager)
     await task_manager.start()
     logger.info(f"Enhanced Maximum Reasoning Lab started with base URL: {CUSTOM_BASE_URL}")
 
@@ -100,9 +104,9 @@ async def shutdown_event():
     if task_manager:
         await task_manager.stop()
 
-class EnhancedTaskManager(OpenRouterBackgroundTaskManager):
-    def __init__(self, api_key: str, base_url: str, ws_manager: WebSocketManager):
-        super().__init__(api_key, base_url)
+class EnhancedTaskManager(BackgroundTaskManager):
+    def __init__(self, provider, ws_manager: WebSocketManager):
+        super().__init__(provider)
         self.ws_manager = ws_manager
         
     async def _execute_task(self, task):
@@ -440,8 +444,10 @@ async def update_config(api_key: str = None, base_url: str = None):
     # Restart task manager with new config
     if task_manager:
         await task_manager.stop()
-        
-    task_manager = EnhancedTaskManager(API_KEY, CUSTOM_BASE_URL, ws_manager)
+    
+    # Create new provider with updated config
+    provider = OpenRouterProvider(API_KEY, CUSTOM_BASE_URL)
+    task_manager = EnhancedTaskManager(provider, ws_manager)
     await task_manager.start()
     
     return {
