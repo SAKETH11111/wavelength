@@ -8,6 +8,10 @@ function configureTaskManager() {
   const apiKey = process.env.OPENROUTER_API_KEY;
   const baseUrl = process.env.CUSTOM_BASE_URL || 'https://openrouter.ai/api/v1';
   
+  console.log('=== ROUTE CONFIG DEBUG ===');
+  console.log('process.env.CUSTOM_BASE_URL:', process.env.CUSTOM_BASE_URL);
+  console.log('Setting globalThis.CUSTOM_BASE_URL to:', baseUrl);
+  
   // Set global configuration for task manager
   (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).OPENROUTER_API_KEY = apiKey;
   (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).CUSTOM_BASE_URL = baseUrl;
@@ -46,8 +50,7 @@ interface ResponseStatus {
 
 export async function POST(req: NextRequest) {
   try {
-    // Configure task manager with environment variables
-    configureTaskManager();
+    // Environment variables are now read directly by task manager
     
     const data: CreateResponseRequest = await req.json();
     
@@ -59,33 +62,23 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Use API key from request or environment
-    const apiKey = data.apiKey || process.env.OPENROUTER_API_KEY;
-    const baseUrl = data.baseUrl || process.env.CUSTOM_BASE_URL || 'https://openrouter.ai/api/v1';
-    
-    if (!apiKey) {
+    // Basic validation
+    if (!process.env.OPENROUTER_API_KEY && !data.apiKey) {
       return NextResponse.json(
         { error: 'API key not configured. Please add your API key in settings.' },
         { status: 401 }
       );
     }
-    
-    // Update global configuration with user values
-    (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).OPENROUTER_API_KEY = apiKey;
-    (globalThis as { CUSTOM_BASE_URL?: string }).CUSTOM_BASE_URL = baseUrl;
 
     // Default values matching Python version
-    const model = data.model || 'openai/o3-pro';
+    const model = data.model || 'openai/o3';
     const background = data.background !== false; // Default to true
     const reasoning = data.reasoning || { effort: 'high', summary: 'auto' };
 
-    // Create background task
-    const task = await taskManager.createResponse(
-      model,
-      data.input,
-      background,
-      reasoning
-    );
+    console.log('Creating background task with:', { model, background, inputLength: data.input.length });
+    
+    // Create background task (now non-blocking)
+    const task = await taskManager.createResponse(model, data.input, background, reasoning);
 
     // Return response status matching Python format
     const responseStatus: ResponseStatus = {
@@ -106,8 +99,10 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('Error creating response:', error);
+    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+    console.error('Full error details:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
+      { error: errorMessage },
       { status: 500 }
     );
   }
