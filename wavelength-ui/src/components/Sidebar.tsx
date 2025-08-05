@@ -3,7 +3,7 @@
 import React from 'react';
 import { Button } from './ui/button';
 import { Plus, Trash2 } from 'lucide-react';
-import { useStore, useActiveChat } from '../lib/store';
+import { useStore } from '../lib/store';
 
 export function Sidebar() {
   const {
@@ -16,7 +16,6 @@ export function Sidebar() {
     toggleSettings,
     config
   } = useStore();
-  const activeChat = useActiveChat();
 
   const handleNewChat = () => {
     createNewChat(config.defaultModel);

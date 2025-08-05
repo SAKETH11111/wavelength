@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { taskManager, TaskStatus } from '@/lib/background-task-manager';
+import { taskManager } from '@/lib/background-task-manager';
 
 export const runtime = 'nodejs';
 
@@ -9,8 +9,8 @@ function configureTaskManager() {
   const baseUrl = process.env.CUSTOM_BASE_URL || 'https://openrouter.ai/api/v1';
   
   // Set global configuration for task manager
-  (globalThis as any).OPENROUTER_API_KEY = apiKey;
-  (globalThis as any).CUSTOM_BASE_URL = baseUrl;
+  (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).OPENROUTER_API_KEY = apiKey;
+  (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).CUSTOM_BASE_URL = baseUrl;
 }
 
 // Interface matching your Python CreateResponseRequest
@@ -31,7 +31,7 @@ interface ResponseStatus {
   started_at?: number;
   completed_at?: number;
   output_text?: string;
-  output?: Array<any>;
+  output?: Array<{ id: string; type: string; status: string; content: Array<{ type: string; text: string }> | string; role?: string }>;
   error?: string;
   usage?: {
     prompt_tokens: number;

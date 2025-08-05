@@ -11,7 +11,7 @@ interface ResponseStatus {
   started_at?: number;
   completed_at?: number;
   output_text?: string;
-  output?: Array<any>;
+  output?: Array<{ id: string; type: string; status: string; content: Array<{ type: string; text: string }> | string; role?: string }>;
   error?: string;
   usage?: {
     prompt_tokens: number;

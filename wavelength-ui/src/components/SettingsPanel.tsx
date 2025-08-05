@@ -35,7 +35,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
     }
   };
 
-  const handleInputChange = (field: keyof typeof config, value: any) => {
+  const handleInputChange = (field: keyof typeof config, value: string | number | boolean) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
   };
 

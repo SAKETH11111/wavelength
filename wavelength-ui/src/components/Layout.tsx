@@ -7,32 +7,20 @@ import { ChatView } from './ChatView';
 import { ChatInput } from './ChatInput';
 import { SettingsPanel } from './SettingsPanel';
 import { useStore } from '../lib/store';
-import { initializeWebSocket, closeWebSocket } from '../lib/api';
 
 export function Layout() {
   const {
     isSidebarOpen,
     isSettingsOpen,
     toggleSidebar,
-    toggleSettings,
-    isConnected,
-    processingCount,
-    queueCount,
-    chats
+    toggleSettings
   } = useStore();
 
-  // Initialize WebSocket connection on mount
+  // Set connection status on mount
   useEffect(() => {
-    initializeWebSocket();
-    
-    // Cleanup on unmount
-    return () => {
-      closeWebSocket();
-    };
+    const { setConnectionStatus } = useStore.getState();
+    setConnectionStatus(true);
   }, []);
-
-  // Calculate total cost across all chats
-  const totalCost = chats.reduce((sum, chat) => sum + chat.totalCost, 0);
 
   return (
     <div className="chat-container h-screen flex overflow-hidden">

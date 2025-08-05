@@ -26,9 +26,7 @@ export function ChatInput() {
   };
 
   const handleSendMessage = async () => {
-    console.log('--- Initiating Message Sending ---');
     if (!message.trim() || isLoading) {
-      console.log('Message sending aborted. Empty or loading.');
       return;
     }
     
@@ -40,16 +38,12 @@ export function ChatInput() {
       // Create new chat if none exists
       let chatId = activeChatId;
       if (!chatId) {
-        console.log('No active chat found. Creating a new one.');
         chatId = createNewChat(config.defaultModel);
-        console.log(`New chat created with ID: ${chatId}`);
       }
 
       // Send message to server
-      console.log(`Sending message to server for chat ID: ${chatId}`);
       const { setChatStatus } = useStore.getState();
       await sendMessageToServer(messageContent, chatId, activeChat?.model || config.defaultModel, setChatStatus);
-      console.log('--- Message Sending Complete ---');
     } catch (error) {
       console.warn('Failed to send message:', error);
       // Restore message on error
