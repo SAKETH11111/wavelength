@@ -5,16 +5,13 @@ import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ChatView } from './ChatView';
 import { ChatInput } from './ChatInput';
-import { SettingsPanel } from './SettingsPanel';
 import { useStore } from '../lib/store';
 import { useBackendInit } from '../hooks/useBackendInit';
 
 export function Layout() {
   const {
     isSidebarOpen,
-    isSettingsOpen,
-    toggleSidebar,
-    toggleSettings
+    toggleSidebar
   } = useStore();
   
   // Initialize backend connection and health checking
@@ -38,7 +35,6 @@ export function Layout() {
         {/* Chat Header */}
         <Header
           toggleSidebar={toggleSidebar}
-          openSettings={toggleSettings}
         />
         
         {/* Chat Messages */}
@@ -47,12 +43,6 @@ export function Layout() {
         {/* Input Area */}
         <ChatInput />
       </div>
-      
-      {/* Settings Panel */}
-      <SettingsPanel
-        isOpen={isSettingsOpen}
-        onClose={toggleSettings}
-      />
       
     </div>
   );

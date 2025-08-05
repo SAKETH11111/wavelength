@@ -1,22 +1,19 @@
 "use client";
 
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Button } from './ui/button';
 import { Badge } from './ui/badge';
-import { Menu, Settings, Moon, Server, Globe, Zap } from 'lucide-react';
-import { useStore, useActiveChat } from '../lib/store';
-import { ModelSelector } from './ModelSelector';
+import { Menu, Settings, Moon, Sun, Server, Globe, Zap } from 'lucide-react';
+import { useStore } from '../lib/store';
+import { useTheme } from './ThemeProvider';
 
 interface HeaderProps {
   toggleSidebar: () => void;
-  openSettings: () => void;
 }
 
-export function Header({ toggleSidebar, openSettings }: HeaderProps) {
-  const { config, updateConfig, backendMode, backendAvailable } = useStore();
-  const activeChat = useActiveChat();
-  const [selectedModel, setSelectedModel] = useState(config.defaultModel);
-  
+export function Header({ toggleSidebar }: HeaderProps) {
+  const { backendMode, backendAvailable } = useStore();
+  const { theme, setTheme } = useTheme();
   const getBackendModeIcon = () => {
     if (backendMode === 'standalone') return <Globe className="w-3 h-3" />;
     if (backendMode === 'backend-only') return <Server className="w-3 h-3" />;
@@ -29,31 +26,14 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
     return backendAvailable ? 'Auto (Backend)' : 'Auto (Standalone)';
   };
 
-  // Update selected model when active chat changes
-  useEffect(() => {
-    if (activeChat) {
-      setSelectedModel(activeChat.model);
-    } else {
-      setSelectedModel(config.defaultModel);
+  const toggleTheme = () => {
+    if (setTheme) {
+      setTheme(theme === 'dark' ? 'light' : 'dark');
     }
-  }, [activeChat, config.defaultModel]);
+  };
 
-  const handleModelChange = (newModel: string) => {
-    setSelectedModel(newModel);
-    
-    if (activeChat) {
-      // Update the model for the active chat
-      const { chats } = useStore.getState();
-      const updatedChats = chats.map(chat => 
-        chat.id === activeChat.id 
-          ? { ...chat, model: newModel, updatedAt: new Date() }
-          : chat
-      );
-      useStore.setState({ chats: updatedChats });
-    } else {
-      // Update default model in config
-      updateConfig({ defaultModel: newModel });
-    }
+  const handleSettingsClick = () => {
+    alert('Settings panel coming soon! We\'re working on bringing you comprehensive configuration options.');
   };
 
   return (
@@ -69,13 +49,6 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
           <Menu className="w-4 h-4" />
         </Button>
         
-        <div className="w-[280px]">
-          <ModelSelector
-            value={selectedModel}
-            onChange={handleModelChange}
-            placeholder="Select model..."
-          />
-        </div>
         
         <div className="flex items-center gap-2">
           <Badge 
@@ -105,7 +78,7 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
           variant="outline"
           size="sm"
           className="p-2"
-          onClick={openSettings}
+          onClick={handleSettingsClick}
         >
           <Settings className="w-4 h-4" />
         </Button>
@@ -113,9 +86,10 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
           variant="outline"
           size="sm"
           className="p-2"
-          onClick={() => {/* TODO: Implement theme toggle */}}
+          onClick={toggleTheme}
+          title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}
         >
-          <Moon className="w-4 h-4" />
+          {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
         </Button>
       </div>
     </div>

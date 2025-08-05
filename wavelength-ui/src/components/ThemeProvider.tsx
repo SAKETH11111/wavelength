@@ -63,11 +63,6 @@ export function ThemeProvider({
     },
   };
 
-  // Don't render until mounted to avoid hydration mismatch
-  if (!mounted) {
-    return <>{children}</>;
-  }
-
   return (
     <ThemeProviderContext.Provider {...props} value={value}>
       {children}
@@ -78,7 +73,11 @@ export function ThemeProvider({
 export const useTheme = () => {
   const context = useContext(ThemeProviderContext);
   if (context === undefined) {
-    throw new Error("useTheme must be used within a ThemeProvider");
+    // Return a default theme state during hydration
+    return {
+      theme: "dark" as Theme,
+      setTheme: () => {}
+    };
   }
   return context;
 };

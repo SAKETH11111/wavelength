@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef } from 'react';
 import { Message } from './Message';
+import { UsageDisplay } from './UsageDisplay';
 import { useActiveChat, useChatMessages, useStore } from '../lib/store';
 
 export function ChatView() {
@@ -41,25 +42,59 @@ export function ChatView() {
     );
   }
 
+  // Calculate total usage for the chat
+  const totalTokens = messages.reduce((sum, msg) => {
+    if (msg.tokens) {
+      return sum + msg.tokens.input + msg.tokens.reasoning + msg.tokens.output;
+    }
+    return sum;
+  }, 0);
+
+  const totalCost = messages.reduce((sum, msg) => sum + (msg.cost || 0), 0);
+
   return (
-    <div
-      id="chat-messages"
-      className="chat-messages flex-1 overflow-y-auto p-6 flex flex-col gap-4"
-    >
-      {messages.map((message) => (
-        <Message
-          key={message.id}
-          role={message.role}
-          content={message.content}
-          timestamp={message.timestamp}
-          model={message.model}
-          cost={config.showCosts ? message.cost : undefined}
-          duration={message.duration}
-          reasoning={config.showReasoning ? message.reasoning : undefined}
-          tokens={config.showTokens ? message.tokens : undefined}
-        />
-      ))}
-      <div ref={messagesEndRef} />
+    <div className="flex-1 flex flex-col">
+      {/* Chat summary header */}
+      {(config.showCosts || config.showTokens) && messages.length > 0 && totalTokens > 0 && (
+        <div className="p-4 border-b border-border bg-muted/30">
+          <div className="flex items-center justify-between">
+            <div className="text-sm font-medium text-foreground">
+              Chat Summary • {activeChat.model}
+            </div>
+            <UsageDisplay
+              tokens={totalTokens > 0 ? {
+                input: messages.reduce((sum, msg) => sum + (msg.tokens?.input || 0), 0),
+                reasoning: messages.reduce((sum, msg) => sum + (msg.tokens?.reasoning || 0), 0),
+                output: messages.reduce((sum, msg) => sum + (msg.tokens?.output || 0), 0)
+              } : undefined}
+              cost={totalCost > 0 ? totalCost : undefined}
+              compact={true}
+              className="text-muted-foreground"
+            />
+          </div>
+        </div>
+      )}
+      
+      {/* Messages */}
+      <div
+        id="chat-messages"
+        className="chat-messages flex-1 overflow-y-auto p-6 flex flex-col gap-4"
+      >
+        {messages.map((message) => (
+          <Message
+            key={message.id}
+            role={message.role}
+            content={message.content}
+            timestamp={message.timestamp}
+            model={message.model}
+            cost={config.showCosts ? message.cost : undefined}
+            duration={message.duration}
+            reasoning={config.showReasoning ? message.reasoning : undefined}
+            tokens={config.showTokens ? message.tokens : undefined}
+          />
+        ))}
+        <div ref={messagesEndRef} />
+      </div>
     </div>
   );
 }

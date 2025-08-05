@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardAction } from './ui/card';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
@@ -24,9 +24,25 @@ export function ProviderCard({ provider, onTest, onToggle, onConfigUpdate }: Pro
   const [testing, setTesting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   
-  const providerConfig = config.providers[provider.id];
-  const [localApiKey, setLocalApiKey] = useState(providerConfig.apiKey);
+  // Defensive check with default values to prevent undefined access
+  const providerConfig = config?.providers?.[provider.id] || {
+    apiKey: '',
+    baseUrl: '',
+    enabled: false,
+    priority: 1
+  };
+  
+  const [localApiKey, setLocalApiKey] = useState(providerConfig.apiKey || '');
   const [localBaseUrl, setLocalBaseUrl] = useState(providerConfig.baseUrl || '');
+
+  // Sync local state when provider config updates (e.g., after store hydration)
+  useEffect(() => {
+    if (config?.providers?.[provider.id]) {
+      const updatedConfig = config.providers[provider.id];
+      setLocalApiKey(updatedConfig.apiKey || '');
+      setLocalBaseUrl(updatedConfig.baseUrl || '');
+    }
+  }, [config?.providers?.[provider.id]?.apiKey, config?.providers?.[provider.id]?.baseUrl, provider.id]);
 
   const handleTest = async () => {
     if (!onTest) return;
@@ -193,30 +209,23 @@ export function ProviderCard({ provider, onTest, onToggle, onConfigUpdate }: Pro
             {provider.models.length > 0 && (
               <div>
                 <Separator className="my-4" />
-                <h4 className="text-sm font-medium mb-2">Available Models</h4>
-                <div className="grid grid-cols-1 gap-2 max-h-32 overflow-y-auto">
+                <h4 className="text-sm font-medium mb-2">Available Models ({provider.models.length})</h4>
+                <div className="grid grid-cols-1 gap-1 max-h-32 overflow-y-auto">
                   {provider.models.slice(0, 5).map((model) => (
-                    <div key={model.id} className="flex items-center justify-between p-2 bg-muted/50 rounded">
-                      <div>
-                        <span className="text-sm font-mono">{model.id}</span>
-                        <div className="flex gap-1 mt-1">
-                          {model.supportsReasoning && (
-                            <Badge variant="secondary" className="text-xs">Reasoning</Badge>
-                          )}
-                          {model.supportsStreaming && (
-                            <Badge variant="secondary" className="text-xs">Streaming</Badge>
-                          )}
-                        </div>
+                    <div key={model.id} className="flex items-center gap-2 p-2 bg-muted/30 rounded text-sm">
+                      <span className="font-mono text-muted-foreground flex-1">{model.id}</span>
+                      <div className="flex gap-1">
+                        {model.supportsReasoning && (
+                          <Badge variant="outline" className="text-xs h-4">R</Badge>
+                        )}
+                        {model.supportsStreaming && (
+                          <Badge variant="outline" className="text-xs h-4">S</Badge>
+                        )}
                       </div>
-                      {model.inputCostPer1M && (
-                        <div className="text-xs text-muted-foreground">
-                          ${model.inputCostPer1M.toFixed(2)}/1M
-                        </div>
-                      )}
                     </div>
                   ))}
                   {provider.models.length > 5 && (
-                    <div className="text-xs text-muted-foreground text-center">
+                    <div className="text-xs text-muted-foreground text-center py-1">
                       +{provider.models.length - 5} more models
                     </div>
                   )}

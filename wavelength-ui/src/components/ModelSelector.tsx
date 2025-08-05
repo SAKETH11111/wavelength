@@ -1,13 +1,16 @@
 "use client";
 
-import React, { useState, useEffect, useMemo } from 'react';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
-import { Input } from './ui/input';
-import { Badge } from './ui/badge';
-import { Button } from './ui/button';
-import { Search, Filter, X } from 'lucide-react';
-import { useStore } from '../lib/store';
-import { ModelInfo } from '../lib/providers/types';
+import React, { useState, useEffect, useMemo } from "react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
+import { Input } from "./ui/input";
+import { Search } from "lucide-react";
+import { useStore } from "../lib/store";
 
 interface ModelSelectorProps {
   value: string;
@@ -16,12 +19,14 @@ interface ModelSelectorProps {
   placeholder?: string;
 }
 
-export function ModelSelector({ value, onChange, className, placeholder = "Select model..." }: ModelSelectorProps) {
-  const { availableModels, providerStatuses, refreshProviderModels, backendMode, backendAvailable } = useStore();
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
-  const [selectedProviders, setSelectedProviders] = useState<string[]>([]);
-  const [selectedCapabilities, setSelectedCapabilities] = useState<string[]>([]);
+export function ModelSelector({
+  value,
+  onChange,
+  className,
+  placeholder = "Select model...",
+}: ModelSelectorProps) {
+  const { availableModels, refreshProviderModels } = useStore();
+  const [searchQuery, setSearchQuery] = useState("");
 
   // Refresh models on component mount
   useEffect(() => {
@@ -30,215 +35,159 @@ export function ModelSelector({ value, onChange, className, placeholder = "Selec
     }
   }, [availableModels.length, refreshProviderModels]);
 
-  // Filter and group models
-  const filteredModels = useMemo(() => {
-    let filtered = availableModels;
+  // Calculate dynamic width based on model names
+  const dynamicWidth = useMemo(() => {
+    if (availableModels.length === 0) return 220; // fallback width
+    
+    // Find the longest model name (including provider)
+    const longestModelName = availableModels.reduce((longest, model) => {
+      const displayLength = model.name.length + model.provider.length + 3; // +3 for spacing
+      return displayLength > longest ? displayLength : longest;
+    }, 0);
+    
+    // Calculate width: approximate 8px per character, with min 200px and max 400px
+    const calculatedWidth = Math.max(200, Math.min(400, longestModelName * 8 + 40));
+    return calculatedWidth;
+  }, [availableModels]);
 
-    // Filter by search query
+  // Filter and sort models - only show gpt-oss models for deployment
+  const filteredModels = useMemo(() => {
+    // First filter for LLM models (exclude image/video generation)
+    let llmModels = availableModels.filter((model) => {
+      const modelId = model.id.toLowerCase();
+      const isLLM =
+        !modelId.includes("dall-e") &&
+        !modelId.includes("midjourney") &&
+        !modelId.includes("stable-diffusion") &&
+        !modelId.includes("imagen") &&
+        !modelId.includes("video");
+      return isLLM;
+    });
+
+    // Filter for gpt-oss models only for deployment
+    let gptOssModels = llmModels.filter((model) => {
+      const modelId = model.id.toLowerCase();
+      const modelName = model.name.toLowerCase();
+      return modelId.includes("gpt-oss") || modelName.includes("gpt-oss");
+    });
+
+    // Apply search query filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      filtered = filtered.filter(model => 
-        model.id.toLowerCase().includes(query) ||
-        model.name.toLowerCase().includes(query) ||
-        model.provider.toLowerCase().includes(query)
+      gptOssModels = gptOssModels.filter(
+        (model) =>
+          model.id.toLowerCase().includes(query) ||
+          model.name.toLowerCase().includes(query) ||
+          model.provider.toLowerCase().includes(query),
       );
     }
 
-    // Filter by selected providers
-    if (selectedProviders.length > 0) {
-      filtered = filtered.filter(model => selectedProviders.includes(model.provider));
+    // Sort gpt-oss models alphabetically
+    const sortedGptOssModels = gptOssModels.sort((a, b) => a.name.localeCompare(b.name));
+
+    // Add "Coming soon" placeholders if no search query
+    if (!searchQuery) {
+      const comingSoonModels = [
+        {
+          id: "coming-soon-claude",
+          name: "Claude Models (Coming Soon)",
+          provider: "Anthropic",
+          disabled: true,
+        },
+        {
+          id: "coming-soon-gpt",
+          name: "GPT Models (Coming Soon)", 
+          provider: "OpenAI",
+          disabled: true,
+        },
+        {
+          id: "coming-soon-gemini",
+          name: "Gemini Models (Coming Soon)",
+          provider: "Google",
+          disabled: true,
+        },
+      ];
+      return [...sortedGptOssModels, ...comingSoonModels];
     }
 
-    // Filter by capabilities
-    if (selectedCapabilities.includes('reasoning')) {
-      filtered = filtered.filter(model => model.supportsReasoning);
-    }
-    if (selectedCapabilities.includes('streaming')) {
-      filtered = filtered.filter(model => model.supportsStreaming);
-    }
-
-    // Group by provider
-    const grouped: Record<string, ModelInfo[]> = {};
-    filtered.forEach(model => {
-      if (!grouped[model.provider]) {
-        grouped[model.provider] = [];
-      }
-      grouped[model.provider].push(model);
-    });
-
-    // Sort models within each provider by name
-    Object.values(grouped).forEach(models => {
-      models.sort((a, b) => a.name.localeCompare(b.name));
-    });
-
-    return grouped;
-  }, [availableModels, searchQuery, selectedProviders, selectedCapabilities]);
-
-  const enabledProviders = providerStatuses.filter(p => p.enabled).map(p => p.id);
-
-  const toggleProvider = (provider: string) => {
-    setSelectedProviders(prev => 
-      prev.includes(provider) 
-        ? prev.filter(p => p !== provider)
-        : [...prev, provider]
-    );
-  };
-
-  const toggleCapability = (capability: string) => {
-    setSelectedCapabilities(prev => 
-      prev.includes(capability) 
-        ? prev.filter(c => c !== capability)
-        : [...prev, capability]
-    );
-  };
-
-  const clearFilters = () => {
-    setSearchQuery('');
-    setSelectedProviders([]);
-    setSelectedCapabilities([]);
-  };
-
-  const hasActiveFilters = searchQuery || selectedProviders.length > 0 || selectedCapabilities.length > 0;
+    return sortedGptOssModels;
+  }, [availableModels, searchQuery]);
 
   return (
     <div className={className}>
-      <div className="space-y-2">
-        {/* Main selector */}
-        <div className="flex gap-2">
-          <Select value={value} onValueChange={onChange}>
-            <SelectTrigger className="flex-1">
-              <SelectValue placeholder={placeholder} />
-            </SelectTrigger>
-            <SelectContent className="max-h-80">
-              {Object.keys(filteredModels).length === 0 ? (
-                <div className="p-4 text-center text-muted-foreground">
-                  <p>No models found</p>
-                  {hasActiveFilters && (
-                    <Button variant="link" size="sm" onClick={clearFilters} className="mt-2">
-                      Clear filters
-                    </Button>
-                  )}
-                </div>
-              ) : (
-                Object.entries(filteredModels).map(([provider, models]) => (
-                  <div key={provider}>
-                    <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground uppercase tracking-wider border-b flex items-center justify-between">
-                      <span>{provider} ({models.length})</span>
-                      {backendMode !== 'standalone' && backendAvailable && (
-                        <Badge variant="outline" className="text-xs">Backend</Badge>
-                      )}
-                    </div>
-                    {models.map((model) => (
-                      <SelectItem key={model.id} value={model.id} className="pl-4">
-                        <div className="flex items-center justify-between w-full">
-                          <div>
-                            <div className="font-mono text-sm">{model.name}</div>
-                            <div className="flex gap-1 mt-1">
-                              {model.supportsReasoning && (
-                                <Badge variant="secondary" className="text-xs">Reasoning</Badge>
-                              )}
-                              {model.supportsStreaming && (
-                                <Badge variant="secondary" className="text-xs">Streaming</Badge>
-                              )}
-                            </div>
-                          </div>
-                          {model.inputCostPer1M && (
-                            <div className="text-xs text-muted-foreground ml-2">
-                              ${model.inputCostPer1M.toFixed(2)}/1M
-                            </div>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger style={{ width: `${dynamicWidth}px` }}>
+          <SelectValue placeholder={placeholder}>
+            {value &&
+              (() => {
+                const selectedModel = availableModels.find(
+                  (m) => m.id === value,
+                );
+                return selectedModel ? (
+                  <div className="flex items-center justify-between w-full">
+                    <span className="font-medium">{selectedModel.name}</span>
+                    <span className="text-xs text-muted-foreground ml-2">
+                      {selectedModel.provider}
+                    </span>
                   </div>
-                ))
-              )}
-            </SelectContent>
-          </Select>
-          
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setShowFilters(!showFilters)}
-            className="px-3"
-          >
-            <Filter className="w-4 h-4" />
-          </Button>
-        </div>
-
-        {/* Filters */}
-        {showFilters && (
-          <div className="p-4 border rounded-lg bg-muted/50 space-y-4">
-            {/* Search */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Search Models</label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search by name or provider..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
-                />
-              </div>
+                ) : (
+                  value
+                );
+              })()}
+          </SelectValue>
+        </SelectTrigger>
+        <SelectContent className="max-h-80" style={{ width: `${dynamicWidth}px` }}>
+          {/* Search input inside dropdown */}
+          <div className="p-2 border-b border-border">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <Input
+                placeholder="Search models..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-10 h-8"
+                onClick={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
+              />
             </div>
+          </div>
 
-            {/* Provider Filter */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Providers</label>
-              <div className="flex flex-wrap gap-2">
-                {enabledProviders.map((provider) => (
-                  <Button
-                    key={provider}
-                    variant={selectedProviders.includes(provider) ? "default" : "outline"}
-                    size="sm"
-                    onClick={() => toggleProvider(provider)}
-                    className="text-xs"
-                  >
-                    {provider}
-                  </Button>
-                ))}
+          {/* Model list */}
+          <div className="max-h-60 overflow-auto">
+            {filteredModels.length === 0 ? (
+              <div className="p-4 text-center text-muted-foreground">
+                <p>No models found</p>
+                {searchQuery && (
+                  <p className="text-xs mt-1">
+                    Try adjusting your search terms
+                  </p>
+                )}
               </div>
-            </div>
-
-            {/* Capability Filter */}
-            <div>
-              <label className="block text-sm font-medium mb-2">Capabilities</label>
-              <div className="flex gap-2">
-                <Button
-                  variant={selectedCapabilities.includes('reasoning') ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggleCapability('reasoning')}
-                  className="text-xs"
+            ) : (
+              filteredModels.map((model) => (
+                <SelectItem 
+                  key={model.id} 
+                  value={model.id}
+                  disabled={(model as any).disabled}
                 >
-                  Reasoning
-                </Button>
-                <Button
-                  variant={selectedCapabilities.includes('streaming') ? "default" : "outline"}
-                  size="sm"
-                  onClick={() => toggleCapability('streaming')}
-                  className="text-xs"
-                >
-                  Streaming
-                </Button>
-              </div>
-            </div>
-
-            {/* Clear filters */}
-            {hasActiveFilters && (
-              <div className="flex justify-between items-center pt-2 border-t">
-                <span className="text-sm text-muted-foreground">
-                  {Object.values(filteredModels).flat().length} models match your filters
-                </span>
-                <Button variant="ghost" size="sm" onClick={clearFilters}>
-                  <X className="w-4 h-4 mr-1" />
-                  Clear filters
-                </Button>
-              </div>
+                  <div className="flex items-center justify-between w-full min-w-0">
+                    <div className="flex flex-col items-start min-w-0 flex-1 pr-2">
+                      <span className={`font-medium text-sm text-left break-words ${
+                        (model as any).disabled ? 'text-muted-foreground' : ''
+                      }`}>
+                        {model.name}
+                      </span>
+                      <span className="text-xs text-muted-foreground text-left break-words">
+                        {model.provider}
+                      </span>
+                    </div>
+                  </div>
+                </SelectItem>
+              ))
             )}
           </div>
-        )}
-      </div>
+        </SelectContent>
+      </Select>
     </div>
   );
 }

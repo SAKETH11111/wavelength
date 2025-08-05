@@ -8,6 +8,7 @@ import { X, Download, Upload, RefreshCw, Settings2, Server, Globe, Zap } from 'l
 import { useStore } from '../lib/store';
 import { ProviderCard } from './ProviderCard';
 import { ModelSelector } from './ModelSelector';
+import { CostAnalytics } from './CostAnalytics';
 import { ProviderType } from '../lib/providers/types';
 
 interface SettingsPanelProps {
@@ -46,8 +47,8 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
 
   const handleUpdateConfig = async () => {
     try {
-      updateConfig(localConfig);
-      alert('Configuration updated successfully!');
+      // Config is already saved via handleInputChange, this is just for explicit save feedback
+      alert('Configuration saved successfully!');
       onClose?.();
     } catch (error) {
       console.error('Error updating configuration:', error);
@@ -62,6 +63,17 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
   const handleProviderToggle = (provider: ProviderType, enabled: boolean) => {
     updateProviderConfig(provider, { enabled });
     updateProviderStatus(provider, { enabled });
+    // Immediately update local config to keep UI in sync
+    setLocalConfig(prev => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [provider]: {
+          ...prev.providers[provider],
+          enabled
+        }
+      }
+    }));
   };
   
   const handleProviderConfigUpdate = (provider: ProviderType, providerConfig: Partial<{ apiKey: string; baseUrl?: string }>) => {
@@ -73,6 +85,17 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
         baseUrl: providerConfig.baseUrl || ''
       });
     }
+    // Update local config to keep UI in sync
+    setLocalConfig(prev => ({
+      ...prev,
+      providers: {
+        ...prev.providers,
+        [provider]: {
+          ...prev.providers[provider],
+          ...providerConfig
+        }
+      }
+    }));
   };
   
   const handleRefreshModels = async () => {
@@ -151,20 +174,21 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
     reader.readAsText(file);
   };
 
-  // Handle clicking outside to save config
+  // Handle clicking outside to close (config is already saved via handleInputChange)
   const handleClose = () => {
-    // Auto-save config when closing
-    updateConfig(localConfig);
     onClose?.();
   };
 
   const handleInputChange = (field: keyof typeof config, value: string | number | boolean) => {
-    setLocalConfig(prev => ({ ...prev, [field]: value }));
+    const newConfig = { ...localConfig, [field]: value };
+    setLocalConfig(newConfig);
+    // Immediately persist to store for better UX
+    updateConfig(newConfig);
   };
 
   return (
     <div 
-      className={`fixed right-0 top-0 w-80 h-screen bg-card border-l border-border transition-transform duration-300 ease-out z-50 flex flex-col ${
+      className={`fixed right-0 top-0 w-96 max-w-[90vw] h-screen bg-card border-l border-border transition-transform duration-300 ease-out z-50 flex flex-col ${
         isOpen ? 'translate-x-0' : 'translate-x-full'
       }`}
     >
@@ -186,8 +210,8 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {/* Navigation Tabs */}
-        <div className="border-b border-border px-6 pt-4">
-          <div className="flex gap-1">
+        <div className="border-b border-border px-4 pt-4">
+          <div className="flex gap-1 overflow-x-auto">
             {[
               { id: 'providers' as const, label: 'Providers', count: providerStatuses.filter(p => p.enabled).length },
               { id: 'backend' as const, label: 'Backend', icon: getBackendStatusIcon() },
@@ -198,7 +222,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
-                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 ${
+                className={`px-3 py-2 text-sm font-medium rounded-t-lg transition-colors flex items-center gap-2 whitespace-nowrap ${
                   activeTab === tab.id
                     ? 'bg-background text-foreground border-b-2 border-primary'
                     : 'text-muted-foreground hover:text-foreground'
@@ -207,7 +231,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
                 {tab.icon && tab.icon}
                 {tab.label}
                 {tab.count !== undefined && (
-                  <Badge variant="secondary" className="ml-2 text-xs">
+                  <Badge variant="secondary" className="ml-1 text-xs">
                     {tab.count}
                   </Badge>
                 )}
@@ -216,7 +240,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
           </div>
         </div>
         
-        <div className="p-6">
+        <div className="p-4">
           {/* Backend Tab */}
           {activeTab === 'backend' && (
             <div className="space-y-6">
@@ -380,7 +404,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
                 </div>
               </div>
               
-              <div className="grid gap-4">
+              <div className="grid gap-3">
                 {providerStatuses.map((provider) => (
                   <ProviderCard
                     key={provider.id}
@@ -393,24 +417,24 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
               </div>
               
               {availableModels.length > 0 && (
-                <div className="mt-8 p-4 bg-muted/50 rounded-lg">
-                  <h5 className="font-medium mb-2">Available Models Summary</h5>
-                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                <div className="mt-6 p-4 bg-muted/50 rounded-lg">
+                  <h5 className="font-medium mb-3">Available Models Summary</h5>
+                  <div className="grid grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Total Models:</span>
-                      <div className="font-mono">{availableModels.length}</div>
+                      <div className="font-mono text-lg">{availableModels.length}</div>
                     </div>
                     <div>
                       <span className="text-muted-foreground">With Reasoning:</span>
-                      <div className="font-mono">{availableModels.filter(m => m.supportsReasoning).length}</div>
+                      <div className="font-mono text-lg">{availableModels.filter(m => m.supportsReasoning).length}</div>
                     </div>
                     <div>
                       <span className="text-muted-foreground">With Streaming:</span>
-                      <div className="font-mono">{availableModels.filter(m => m.supportsStreaming).length}</div>
+                      <div className="font-mono text-lg">{availableModels.filter(m => m.supportsStreaming).length}</div>
                     </div>
                     <div>
                       <span className="text-muted-foreground">Active Providers:</span>
-                      <div className="font-mono">{providerStatuses.filter(p => p.enabled && p.connected).length}</div>
+                      <div className="font-mono text-lg">{providerStatuses.filter(p => p.enabled && p.connected).length}</div>
                     </div>
                   </div>
                 </div>
@@ -529,6 +553,14 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
                   </label>
                 </div>
               </div>
+              
+              {/* Usage Analytics */}
+              {(localConfig.showCosts || localConfig.showTokens) && (
+                <div>
+                  <h4 className="font-semibold mb-4 text-foreground">Usage Analytics</h4>
+                  <CostAnalytics detailed={true} />
+                </div>
+              )}
             </div>
           )}
           
@@ -562,26 +594,27 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
                   </div>
                   
                   <div className="p-4 bg-muted/50 rounded-lg">
-                    <h5 className="font-medium mb-2">Reasoning Model Support</h5>
+                    <h5 className="font-medium mb-2">Reasoning Models ({availableModels.filter(m => m.supportsReasoning).length})</h5>
                     <p className="text-sm text-muted-foreground mb-3">
-                      The following models support advanced reasoning capabilities:
+                      Models with advanced reasoning capabilities:
                     </p>
-                    <div className="space-y-2">
+                    <div className="space-y-1">
                       {availableModels
                         .filter(m => m.supportsReasoning)
                         .slice(0, 5)
                         .map((model) => (
-                          <div key={model.id} className="flex items-center justify-between text-sm">
-                            <span className="font-mono">{model.id}</span>
-                            {model.reasoningCostPer1M && (
-                              <span className="text-muted-foreground">
-                                ${model.reasoningCostPer1M.toFixed(2)}/1M reasoning tokens
-                              </span>
-                            )}
+                          <div key={model.id} className="flex items-center justify-between text-sm p-2 bg-background/50 rounded">
+                            <span className="font-mono text-muted-foreground">{model.id}</span>
+                            <div className="flex gap-1">
+                              <Badge variant="outline" className="text-xs h-4">R</Badge>
+                              {model.supportsStreaming && (
+                                <Badge variant="outline" className="text-xs h-4">S</Badge>
+                              )}
+                            </div>
                           </div>
                         ))}
                       {availableModels.filter(m => m.supportsReasoning).length > 5 && (
-                        <div className="text-xs text-muted-foreground">
+                        <div className="text-xs text-muted-foreground text-center py-1">
                           +{availableModels.filter(m => m.supportsReasoning).length - 5} more models
                         </div>
                       )}
@@ -593,7 +626,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
           )}
           
           {/* Save Button */}
-          <div className="mt-8 pt-6 border-t border-border">
+          <div className="mt-6 pt-4 border-t border-border">
             <Button 
               onClick={handleUpdateConfig}
               className="w-full"

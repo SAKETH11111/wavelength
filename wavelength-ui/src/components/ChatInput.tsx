@@ -1,22 +1,53 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Button } from './ui/button';
 import { Textarea } from './ui/textarea';
 import { Send } from 'lucide-react';
 import { useStore, useActiveChat } from '../lib/store';
 import { sendMessageToServer } from '../lib/api';
+import { ModelSelector } from './ModelSelector';
 
 export function ChatInput() {
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState('');
   
   const { 
     createNewChat, 
     activeChatId, 
-    config 
+    config, 
+    updateConfig 
   } = useStore();
   const activeChat = useActiveChat();
+
+  // Update selected model when active chat changes
+  useEffect(() => {
+    if (activeChat) {
+      setSelectedModel(activeChat.model);
+    } else {
+      setSelectedModel(config.defaultModel);
+    }
+  }, [activeChat, config.defaultModel]);
+
+  const handleModelChange = (newModel: string) => {
+    setSelectedModel(newModel);
+    
+    if (activeChat) {
+      // Update the model for the active chat
+      const { chats } = useStore.getState();
+      const updatedChats = chats.map(chat => 
+        chat.id === activeChat.id 
+          ? { ...chat, model: newModel, updatedAt: new Date() }
+          : chat
+      );
+      useStore.setState({ chats: updatedChats });
+    } else {
+      // Update default model in config
+      updateConfig({ defaultModel: newModel });
+    }
+  };
 
   const handleKeyDown = (event: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -35,6 +66,9 @@ export function ChatInput() {
     setIsLoading(true);
 
     try {
+      // Clear any previous errors
+      setError(null);
+      
       // Create new chat if none exists
       let chatId = activeChatId;
       if (!chatId) {
@@ -43,9 +77,23 @@ export function ChatInput() {
 
       // Send message to server
       const { setChatStatus } = useStore.getState();
-      await sendMessageToServer(messageContent, chatId, activeChat?.model || config.defaultModel, setChatStatus);
+      await sendMessageToServer(messageContent, chatId, selectedModel || activeChat?.model || config.defaultModel, setChatStatus);
+      
+      console.log('Message sent successfully');
     } catch (error) {
-      console.warn('Failed to send message:', error);
+      console.error('Failed to send message:', error);
+      
+      // Extract error message for display
+      let errorMessage = 'Failed to send message';
+      if (error instanceof Error) {
+        errorMessage = error.message;
+      }
+      
+      // Set error state for user feedback
+      setError(errorMessage.includes('Server responded with status 500') 
+        ? 'Server error occurred. Please try again.' 
+        : errorMessage);
+      
       // Restore message on error
       setMessage(messageContent);
     } finally {
@@ -60,6 +108,29 @@ export function ChatInput() {
 
   return (
     <div className="chat-input-area p-4 border-t border-border bg-background">
+      {error && (
+        <div className="mb-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
+          {error}
+          <button 
+            onClick={() => setError(null)}
+            className="ml-2 text-red-500 hover:text-red-700"
+            aria-label="Dismiss error"
+          >
+            ×
+          </button>
+        </div>
+      )}
+      
+      {/* Model Selector */}
+      <div className="mb-3">
+        <ModelSelector
+          value={selectedModel}
+          onChange={handleModelChange}
+          placeholder="Select model..."
+          className="w-fit"
+        />
+      </div>
+      
       <div className="flex gap-2 items-end">
         <Textarea
           value={message}
@@ -90,10 +161,10 @@ export function ChatInput() {
         <span>
           {activeChatId ? (
             <>
-              Ready for parallel sessions • Using {activeChat?.model?.split('/')[1] || config.defaultModel.split('/')[1] || 'default'}
+              Ready for parallel sessions • Using {selectedModel?.split('/')[1] || selectedModel || 'default'}
             </>
           ) : (
-            `Create a new chat to get started • Default: ${config.defaultModel.split('/')[1] || config.defaultModel}`
+            `Create a new chat to get started • Default: ${selectedModel?.split('/')[1] || selectedModel || 'default'}`
           )}
         </span>
         <span>Press Enter to send, Shift+Enter for new line</span>

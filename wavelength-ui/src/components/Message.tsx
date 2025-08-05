@@ -1,6 +1,8 @@
 "use client";
 
 import React from 'react';
+import { UsageDisplay } from './UsageDisplay';
+import { useStore } from '@/lib/store';
 
 interface MessageProps {
   role: 'user' | 'assistant';
@@ -19,6 +21,7 @@ interface MessageProps {
 
 export function Message({ role, content, timestamp, model, reasoning, tokens, cost, duration }: MessageProps) {
   const isUser = role === 'user';
+  const { config } = useStore();
   
   const formatTime = (date: Date | string) => {
     const dateObj = typeof date === 'string' ? new Date(date) : date;
@@ -48,21 +51,24 @@ export function Message({ role, content, timestamp, model, reasoning, tokens, co
         </div>
       )}
 
-      {/* Token information for AI messages */}
-      {!isUser && tokens && (
-        <div className="text-xs font-mono text-muted-foreground mt-2 bg-muted p-2 rounded">
-          Input: {tokens.input} •
-          Reasoning: {tokens.reasoning} •
-          Output: {tokens.output}
+      {/* Usage information for AI messages */}
+      {!isUser && (config.showTokens || config.showCosts) && (tokens || cost !== undefined || duration) && (
+        <div className="mt-2">
+          <UsageDisplay
+            tokens={tokens}
+            cost={cost}
+            duration={duration}
+            model={model}
+            timestamp={typeof timestamp === 'string' ? new Date(timestamp) : timestamp}
+            compact={true}
+          />
         </div>
       )}
       
       {/* Metadata */}
       <div className="text-xs text-muted-foreground mt-1 flex items-center gap-2" suppressHydrationWarning>
         <span>{formatTime(timestamp)}</span>
-        {model && <span>• {model}</span>}
-        {cost && <span>• ${cost.toFixed(4)}</span>}
-        {duration && <span>• {duration.toFixed(1)}s</span>}
+        {model && !config.showTokens && <span>• {model}</span>}
       </div>
     </div>
   );
