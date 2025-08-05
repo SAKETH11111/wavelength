@@ -18,7 +18,14 @@ export function Sidebar() {
   } = useStore();
 
   const handleNewChat = () => {
-    createNewChat(config.defaultModel);
+    // Smart new chat creation: don't create a new chat if current chat is empty
+    const activeChat = chats.find(chat => chat.id === activeChatId);
+    
+    // If there's no active chat, or the active chat has messages, create a new chat
+    if (!activeChat || activeChat.messages.length > 0) {
+      createNewChat(config.defaultModel);
+    }
+    // If the active chat is empty, just focus on it (no action needed)
   };
 
   const handleChatSelect = (chatId: string) => {

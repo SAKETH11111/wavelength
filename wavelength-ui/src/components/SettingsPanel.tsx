@@ -35,6 +35,13 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
     }
   };
 
+  // Handle clicking outside to save config
+  const handleClose = () => {
+    // Auto-save config when closing
+    updateConfig(localConfig);
+    onClose?.();
+  };
+
   const handleInputChange = (field: keyof typeof config, value: string | number | boolean) => {
     setLocalConfig(prev => ({ ...prev, [field]: value }));
   };
@@ -53,7 +60,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
             variant="outline"
             size="sm"
             className="p-2"
-            onClick={onClose}
+            onClick={handleClose}
           >
             <X className="w-4 h-4" />
           </Button>
@@ -85,7 +92,7 @@ export function SettingsPanel({ isOpen = false, onClose }: SettingsPanelProps) {
             </label>
             <Input
               type="text"
-              placeholder="http://localhost:8000"
+              placeholder="https://openrouter.ai/api/v1"
               value={localConfig.baseUrl}
               onChange={(e) => handleInputChange('baseUrl', e.target.value)}
               className="w-full bg-input border border-border p-2 font-mono text-foreground"

@@ -1,7 +1,7 @@
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import HTMLResponse, StreamingResponse
+from fastapi.responses import StreamingResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import List, Dict, Any, Optional, Set
 import asyncio
@@ -11,8 +11,8 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
-from background_task_manager import BackgroundTaskManager, TaskStatus
-from providers import OpenRouterProvider
+from .task_manager import BackgroundTaskManager, TaskStatus
+from .providers import OpenRouterProvider
 import logging
 
 load_dotenv()
@@ -50,10 +50,16 @@ async def lifespan(app: FastAPI):
     if task_manager:
         await task_manager.stop()
 
-app = FastAPI(title="Maximum Reasoning Lab - Enhanced", lifespan=lifespan)
-# Get the directory where this script is located
-script_dir = os.path.dirname(os.path.abspath(__file__))
-templates = Jinja2Templates(directory=os.path.join(script_dir, "templates"))
+app = FastAPI(title="Wavelength Backend API", lifespan=lifespan)
+
+# Configure CORS for Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000", "http://localhost:3001"],  # Next.js dev ports
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class CreateResponseRequest(BaseModel):
     model: str = "openai/o3-pro"
@@ -184,13 +190,17 @@ class EnhancedTaskManager(BackgroundTaskManager):
             task.error = str(e)
             task.completed_at = time.time()
 
-@app.get("/", response_class=HTMLResponse)
-async def enhanced_home(request: Request):
-    """Serve the enhanced UI"""
-    return templates.TemplateResponse("enhanced_ui.html", {
-        "request": request,
+@app.get("/")
+async def root():
+    """API information endpoint"""
+    return JSONResponse({
+        "name": "Wavelength Backend API",
+        "version": "1.0.0",
+        "status": "running",
         "api_key_configured": bool(API_KEY),
-        "base_url": CUSTOM_BASE_URL
+        "base_url": CUSTOM_BASE_URL,
+        "frontend_url": "http://localhost:3000",
+        "docs_url": "/docs"
     })
 
 # Classic UI route removed - using enhanced UI only

@@ -1,144 +1,122 @@
-# Enhanced Maximum Reasoning Lab
+# Wavelength - Universal AI Chat Interface
 
-A FastAPI-based application that provides an enhanced interface for maximum reasoning tasks using OpenRouter's O3-Pro model.
+A modern, modular AI chat interface built with Next.js and optional Python backend support.
+
+## Project Structure
+
+```
+o3-pro/
+├── wavelength-ui/       # Next.js frontend application
+│   ├── src/
+│   │   ├── app/        # Next.js app router & API routes
+│   │   ├── components/ # React components
+│   │   └── lib/        # Utilities, store, API clients
+│   └── package.json
+│
+├── backend/            # Optional Python FastAPI backend
+│   ├── main.py        # FastAPI server
+│   ├── task_manager.py # Background task processing
+│   └── providers/     # AI provider integrations
+│
+└── docs/              # Project documentation
+```
+
+## Architecture Options
+
+### Option 1: Next.js Standalone (Recommended)
+The `wavelength-ui` directory contains a complete Next.js application with:
+- Built-in API routes for AI interactions
+- TypeScript-based task management
+- Zustand state management
+- Real-time streaming support
+
+```bash
+cd wavelength-ui
+npm install
+npm run dev
+```
+
+### Option 2: Next.js + Python Backend
+For advanced features, you can run the Python FastAPI backend alongside Next.js:
+- Enhanced background task processing
+- WebSocket support
+- Direct provider integrations
+
+```bash
+# Terminal 1: Frontend
+cd wavelength-ui
+npm run dev
+
+# Terminal 2: Backend
+cd backend
+pip install -r requirements.txt
+uvicorn main:app --reload
+```
 
 ## Features
 
-- **Real-time WebSocket streaming** for reasoning progress
-- **Background task management** for long-running operations
-- **Enhanced UI** with live updates and progress tracking
-- **Configurable API endpoints** and providers
-- **Cost estimation** and usage tracking
-- **Task cancellation** and status monitoring
+- 🚀 **Rapid Development**: 6-day sprint methodology
+- 🔌 **Pluggable Providers**: Support for OpenAI, Anthropic, local models
+- 💰 **Cost Transparency**: Real-time usage and cost tracking
+- 🤝 **Collaboration**: Shared sessions and team features
+- 🧠 **Reasoning Visualization**: See AI's chain-of-thought
+- 🔒 **Enterprise Security**: Self-hosting options with Docker/K8s
 
-## Quick Start
+## Getting Started
 
-### 1. Install Dependencies
+1. **Environment Setup**:
+   ```bash
+   # In wavelength-ui/.env.local
+   OPENROUTER_API_KEY=your-api-key
+   CUSTOM_BASE_URL=https://kilocode.ai/api/openrouter
+   ```
 
-```bash
-pip install -r requirements.txt
-```
+2. **Run the Application**:
+   ```bash
+   cd wavelength-ui
+   npm install
+   npm run dev
+   ```
 
-### 2. Configure Environment
+3. **Access the UI**: Open http://localhost:3000
 
-Copy the example configuration file and update it with your settings:
+## Technology Stack
 
-```bash
-cp config.example.env .env
-```
-
-Edit `.env` and add your OpenRouter API key:
-
-```env
-OPENROUTER_API_KEY=your_openrouter_api_key_here
-PORT=8001
-```
-
-### 3. Get Your API Key
-
-1. Visit [OpenRouter](https://openrouter.ai/keys)
-2. Create an account and generate an API key
-3. Add the key to your `.env` file
-
-### 4. Run the Application
-
-```bash
-python enhanced_app.py
-```
-
-The application will start on `http://localhost:8001` (or the port specified in your `.env` file).
+- **Frontend**: Next.js 15, React 19, TypeScript, Tailwind CSS
+- **State Management**: Zustand
+- **UI Components**: Radix UI, shadcn/ui
+- **Backend (Optional)**: FastAPI, Python 3.8+
+- **AI Integration**: OpenRouter API
 
 ## API Endpoints
 
-### Core Endpoints
+### Next.js API Routes (Built-in)
+- `POST /api/responses` - Create a new AI response
+- `GET /api/responses/{id}` - Get response status
+- `GET /api/responses/{id}/stream` - Stream response updates
 
-- `GET /` - Enhanced web interface
-- `POST /responses` - Create a new reasoning task
-- `GET /responses/{id}` - Get task status and results
-- `POST /responses/{id}/cancel` - Cancel a running task
-- `GET /responses/{id}/stream` - Stream task progress
-- `GET /tasks` - List all tasks
+### Python Backend (Optional)
+- `POST /api/responses` - Create a new reasoning task
+- `GET /api/responses/{id}` - Get task status and results
+- `GET /api/responses/{id}/stream` - Stream task progress
+- `WS /ws` - WebSocket for real-time updates
 
-### Configuration
-
-- `POST /config/update` - Update API key and base URL
-- `GET /health` - Health check endpoint
-
-### WebSocket
-
-- `WS /ws` - Real-time updates and streaming
-
-## Usage Examples
-
-### Create a Reasoning Task
-
-```bash
-curl -X POST "http://localhost:8001/responses" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "openai/o3-pro",
-    "input": [{"role": "user", "content": "Explain quantum computing in simple terms"}],
-    "background": true,
-    "reasoning": {"effort": "high", "summary": "auto"}
-  }'
-```
-
-### Monitor Task Progress
-
-```bash
-curl "http://localhost:8001/responses/{task_id}"
-```
-
-### Stream Real-time Updates
-
-```bash
-curl "http://localhost:8001/responses/{task_id}/stream"
-```
-
-## Configuration Options
+## Configuration
 
 | Environment Variable | Default | Description |
 |---------------------|---------|-------------|
 | `OPENROUTER_API_KEY` | - | Your OpenRouter API key (required) |
 | `CUSTOM_BASE_URL` | `https://openrouter.ai/api/v1` | API base URL |
-| `PORT` | `8001` | Server port |
-| `LOG_LEVEL` | `INFO` | Logging level |
 
-## Troubleshooting
+## Project Vision
 
-### Port Already in Use
-
-If you get a port conflict error, either:
-1. Change the `PORT` in your `.env` file
-2. Kill the process using the port: `lsof -ti:8000 | xargs kill -9`
-
-### Missing API Key
-
-The application will start without an API key but with limited functionality. You can:
-1. Set the `OPENROUTER_API_KEY` environment variable
-2. Use the `/config/update` endpoint to configure it at runtime
-
-### WebSocket Connection Issues
-
-Make sure your browser supports WebSockets and that you're accessing the application via `http://` or `https://` (not `file://`).
-
-## Development
-
-### Running in Development Mode
-
-```bash
-uvicorn enhanced_app:app --reload --host 0.0.0.0 --port 8001
-```
-
-### Code Style
-
-This project follows PEP 8 standards. Use Black for formatting:
-
-```bash
-pip install black
-black enhanced_app.py
-```
+Wavelength aims to be the definitive universal AI chat interface by:
+- Synthesizing the best features from open-source and commercial solutions
+- Providing a modular, transparent, and collaborative platform
+- Enabling rapid iteration with 6-day development cycles
+- Building trust through reasoning visualization
+- Offering enterprise-grade security and compliance
 
 ## License
 
-This project is open source and available under the MIT License. 
+This project is open source and available under the MIT License.

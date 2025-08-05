@@ -20,6 +20,8 @@ interface CreateResponseRequest {
   background?: boolean;
   stream?: boolean;
   reasoning?: { effort: string; summary: string };
+  apiKey?: string;
+  baseUrl?: string;
 }
 
 // Interface matching your Python ResponseStatus
@@ -57,14 +59,20 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check API key
-    const apiKey = process.env.OPENROUTER_API_KEY;
+    // Use API key from request or environment
+    const apiKey = data.apiKey || process.env.OPENROUTER_API_KEY;
+    const baseUrl = data.baseUrl || process.env.CUSTOM_BASE_URL || 'https://openrouter.ai/api/v1';
+    
     if (!apiKey) {
       return NextResponse.json(
-        { error: 'API key not configured' },
-        { status: 500 }
+        { error: 'API key not configured. Please add your API key in settings.' },
+        { status: 401 }
       );
     }
+    
+    // Update global configuration with user values
+    (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).OPENROUTER_API_KEY = apiKey;
+    (globalThis as { CUSTOM_BASE_URL?: string }).CUSTOM_BASE_URL = baseUrl;
 
     // Default values matching Python version
     const model = data.model || 'openai/o3-pro';
