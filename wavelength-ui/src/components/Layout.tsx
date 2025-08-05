@@ -24,21 +24,23 @@ export function Layout() {
   }, []);
 
   return (
-    <div className="chat-container h-screen flex overflow-hidden">
+    <div className="h-screen w-full flex overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
-      <div className={`sidebar w-[280px] h-full bg-background border-r border-border flex flex-col transition-transform duration-300 ease-out ${!isSidebarOpen ? 'collapsed -translate-x-full -mr-[280px]' : ''}`}>
+      <div className={`${!isSidebarOpen ? 'sidebar collapsed -translate-x-full -mr-[280px]' : ''}`}>
         <Sidebar />
       </div>
       
       {/* Main Area */}
-      <div className="main-area flex-1 flex flex-col min-w-0 min-h-0">
+      <div className="flex-1 flex flex-col min-w-0 min-h-0 bg-background">
         {/* Chat Header */}
-        <Header
-          toggleSidebar={toggleSidebar}
-        />
+        <div className="flex-shrink-0">
+          <Header
+            toggleSidebar={toggleSidebar}
+          />
+        </div>
         
         {/* Chat Messages */}
-        <div className="flex-1 min-h-0 flex flex-col">
+        <div className="flex-1 min-h-0 overflow-hidden">
           <ChatView />
         </div>
         

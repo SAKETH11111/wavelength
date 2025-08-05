@@ -142,6 +142,15 @@
     padding: 0;
     line-height: 1.6;
     letter-spacing: var(--tracking-normal);
+    
+    /* Fallback styles for critical properties */
+    background-color: #ffffff;
+    color: #000000;
+  }
+  
+  .dark body {
+    background-color: #0a0a0a;
+    color: #ffffff;
   }
 }
 
@@ -413,20 +422,37 @@
   }
 
   /* Additional layout styles from original template */
-  .chat-container {
+  .chat-container,
+  .layout-container {
     height: 100vh;
+    width: 100vw;
     display: flex;
     overflow: hidden;
+    position: fixed;
+    top: 0;
+    left: 0;
+    background-color: white;
+  }
+  
+  .dark .chat-container,
+  .dark .layout-container {
+    background-color: #0a0a0a;
   }
 
   .sidebar {
     height: 100vh;
     width: 280px;
-    background: var(--sidebar, var(--background));
-    border-right: 1px solid var(--border);
+    background: var(--sidebar, #f8f9fa);
+    border-right: 1px solid var(--border, #e5e7eb);
     display: flex;
     flex-direction: column;
     transition: transform 0.3s ease-out;
+    flex-shrink: 0;
+  }
+  
+  .dark .sidebar {
+    background: var(--sidebar, #1a1a1a);
+    border-right: 1px solid var(--border, #374151);
   }
 
   .main-area {
@@ -434,6 +460,12 @@
     display: flex;
     flex-direction: column;
     min-width: 0;
+    min-height: 100vh;
+    background: var(--background, #ffffff);
+  }
+  
+  .dark .main-area {
+    background: var(--background, #0a0a0a);
   }
 
   .chat-header {
