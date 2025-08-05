@@ -7,6 +7,7 @@ import { ChatView } from './ChatView';
 import { ChatInput } from './ChatInput';
 import { SettingsPanel } from './SettingsPanel';
 import { useStore } from '../lib/store';
+import { useBackendInit } from '../hooks/useBackendInit';
 
 export function Layout() {
   const {
@@ -15,6 +16,9 @@ export function Layout() {
     toggleSidebar,
     toggleSettings
   } = useStore();
+  
+  // Initialize backend connection and health checking
+  useBackendInit();
 
   // Set connection status on mount
   useEffect(() => {

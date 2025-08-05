@@ -2,10 +2,10 @@
 
 import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
-import { Menu, Settings, Moon } from 'lucide-react';
+import { Menu, Settings, Moon, Server, Globe, Zap } from 'lucide-react';
 import { useStore, useActiveChat } from '../lib/store';
+import { ModelSelector } from './ModelSelector';
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -13,9 +13,21 @@ interface HeaderProps {
 }
 
 export function Header({ toggleSidebar, openSettings }: HeaderProps) {
-  const { config, updateConfig } = useStore();
+  const { config, updateConfig, backendMode, backendAvailable } = useStore();
   const activeChat = useActiveChat();
   const [selectedModel, setSelectedModel] = useState(config.defaultModel);
+  
+  const getBackendModeIcon = () => {
+    if (backendMode === 'standalone') return <Globe className="w-3 h-3" />;
+    if (backendMode === 'backend-only') return <Server className="w-3 h-3" />;
+    return <Zap className="w-3 h-3" />; // auto mode
+  };
+  
+  const getBackendModeText = () => {
+    if (backendMode === 'standalone') return 'Standalone';
+    if (backendMode === 'backend-only') return 'Backend Only';
+    return backendAvailable ? 'Auto (Backend)' : 'Auto (Standalone)';
+  };
 
   // Update selected model when active chat changes
   useEffect(() => {
@@ -57,16 +69,13 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
           <Menu className="w-4 h-4" />
         </Button>
         
-        <Select value={selectedModel} onValueChange={handleModelChange}>
-          <SelectTrigger className="w-[200px] bg-background border border-border p-2 font-mono text-foreground cursor-pointer transition-colors hover:border-ring">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="openai/o3-pro">o3 Pro (Max)</SelectItem>
-            <SelectItem value="openai/o3">o3 (Max)</SelectItem>
-            <SelectItem value="x-ai/grok-4">Grok 4 (Max)</SelectItem>
-          </SelectContent>
-        </Select>
+        <div className="w-[280px]">
+          <ModelSelector
+            value={selectedModel}
+            onChange={handleModelChange}
+            placeholder="Select model..."
+          />
+        </div>
         
         <div className="flex items-center gap-2">
           <Badge 
@@ -86,6 +95,12 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
       
       {/* Right side controls */}
       <div className="flex items-center gap-2">
+        {/* Backend mode indicator */}
+        <div className="flex items-center gap-1 px-2 py-1 rounded-md bg-muted/50 text-xs text-muted-foreground">
+          {getBackendModeIcon()}
+          <span>{getBackendModeText()}</span>
+        </div>
+        
         <Button 
           variant="outline"
           size="sm"

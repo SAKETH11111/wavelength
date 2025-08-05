@@ -12,7 +12,8 @@ import uuid
 from contextlib import asynccontextmanager
 from dotenv import load_dotenv
 from .task_manager import BackgroundTaskManager, TaskStatus
-from .providers import OpenRouterProvider
+from .enhanced_task_manager import EnhancedBackgroundTaskManager
+from .provider_registry import provider_registry
 import logging
 
 load_dotenv()
@@ -23,26 +24,26 @@ logging.basicConfig(level=getattr(logging, log_level, logging.INFO))
 logger = logging.getLogger(__name__)
 
 # Global task manager and WebSocket connections
-task_manager: Optional[BackgroundTaskManager] = None
+task_manager: Optional[EnhancedBackgroundTaskManager] = None
 active_connections: Set[WebSocket] = set()
-
-# Configuration
-API_KEY = os.getenv("OPENROUTER_API_KEY", "")
-CUSTOM_BASE_URL = os.getenv("CUSTOM_BASE_URL", "https://openrouter.ai/api/v1")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
     global task_manager
-    if not API_KEY:
-        logger.warning("No OPENROUTER_API_KEY found in environment. Some features may not work properly.")
-        logger.info("To configure your API key, set the OPENROUTER_API_KEY environment variable or use the /config/update endpoint.")
-    # Create OpenRouter provider
-    provider = OpenRouterProvider(API_KEY, CUSTOM_BASE_URL)
-    # Create task manager with provider
-    task_manager = EnhancedTaskManager(provider, ws_manager)
+    
+    # Log available providers at startup
+    available_providers = provider_registry.get_available_providers()
+    if not available_providers:
+        logger.error("No providers configured! Please set API keys in environment variables.")
+        logger.info("Supported environment variables: OPENROUTER_API_KEY, OPENAI_API_KEY, ANTHROPIC_API_KEY")
+    else:
+        logger.info(f"Available providers: {[p.value for p in available_providers]}")
+    
+    # Create enhanced task manager with provider registry
+    task_manager = EnhancedTaskManagerWithWebSocket(ws_manager)
     await task_manager.start()
-    logger.info(f"Enhanced Maximum Reasoning Lab started with base URL: {CUSTOM_BASE_URL}")
+    logger.info("Wavelength backend started with multi-provider support")
     
     yield
     
@@ -115,9 +116,9 @@ class WebSocketManager:
 # Initialize WebSocket manager
 ws_manager = WebSocketManager()
 
-class EnhancedTaskManager(BackgroundTaskManager):
-    def __init__(self, provider, ws_manager: WebSocketManager):
-        super().__init__(provider)
+class EnhancedTaskManagerWithWebSocket(EnhancedBackgroundTaskManager):
+    def __init__(self, ws_manager: WebSocketManager):
+        super().__init__()
         self.ws_manager = ws_manager
         
     async def _execute_task(self, task):

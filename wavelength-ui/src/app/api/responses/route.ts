@@ -1,21 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskManager } from '@/lib/background-task-manager';
+import { UnifiedAPIGateway, createGatewayFromEnv } from '@/lib/api-gateway';
 
 export const runtime = 'nodejs';
 
-// Configure the task manager with environment variables
-function configureTaskManager() {
-  const apiKey = process.env.OPENROUTER_API_KEY;
-  const baseUrl = process.env.CUSTOM_BASE_URL || 'https://openrouter.ai/api/v1';
-  
-  console.log('=== ROUTE CONFIG DEBUG ===');
-  console.log('process.env.CUSTOM_BASE_URL:', process.env.CUSTOM_BASE_URL);
-  console.log('Setting globalThis.CUSTOM_BASE_URL to:', baseUrl);
-  
-  // Set global configuration for task manager
-  (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).OPENROUTER_API_KEY = apiKey;
-  (globalThis as { OPENROUTER_API_KEY?: string; CUSTOM_BASE_URL?: string }).CUSTOM_BASE_URL = baseUrl;
+// Global gateway instance for enhanced requests
+let gatewayInstance: UnifiedAPIGateway | null = null;
+
+function getGateway(): UnifiedAPIGateway {
+  if (!gatewayInstance) {
+    gatewayInstance = createGatewayFromEnv({
+      enableDetailedLogging: process.env.NODE_ENV === 'development',
+      enableCaching: true,
+      enableFallback: true,
+      enableRateLimiting: true,
+      enableCircuitBreaker: true,
+      enableCostTracking: true,
+      enableHealthMonitoring: true
+    });
+  }
+  return gatewayInstance;
 }
+
+// Legacy configuration function removed - now handled by provider system
 
 // Interface matching your Python CreateResponseRequest
 interface CreateResponseRequest {
@@ -50,9 +57,15 @@ interface ResponseStatus {
 
 export async function POST(req: NextRequest) {
   try {
-    // Environment variables are now read directly by task manager
-    
     const data: CreateResponseRequest = await req.json();
+    
+    // Check if gateway mode is requested via headers or query params
+    const useGateway = req.headers.get('x-use-gateway') === 'true' || 
+                      new URL(req.url).searchParams.get('gateway') === 'true';
+    
+    // Check if backend delegation is requested
+    const useBackend = req.headers.get('x-use-backend') === 'true' || 
+                      new URL(req.url).searchParams.get('backend') === 'true';
     
     // Validate required fields
     if (!data.input || !Array.isArray(data.input)) {
@@ -75,10 +88,39 @@ export async function POST(req: NextRequest) {
     const background = data.background !== false; // Default to true
     const reasoning = data.reasoning || { effort: 'high', summary: 'auto' };
 
-    console.log('Creating background task with:', { model, background, inputLength: data.input.length });
+    console.log('Creating background task with:', { model, background, inputLength: data.input.length, useGateway, useBackend });
     
-    // Create background task (now non-blocking)
-    const task = await taskManager.createResponse(model, data.input, background, reasoning);
+    // Try backend delegation if requested (would need backend client integration)
+    if (useBackend) {
+      console.log('Backend delegation requested but not implemented in this route');
+      // This would delegate to the FastAPI backend
+      // For now, we'll fall through to the existing logic
+    }
+    
+    // Create background task using gateway or provider system
+    let task;
+    if (useGateway) {
+      // Use enhanced task manager with gateway
+      const gatewayConfig = {
+        enableDetailedLogging: process.env.NODE_ENV === 'development',
+        enableCaching: data.stream !== true, // Only cache non-streaming requests
+        enableFallback: true,
+        maxFallbackAttempts: 2,
+        enableRateLimiting: true,
+        enableCircuitBreaker: true,
+        enableCostTracking: true,
+        enableHealthMonitoring: true,
+        providerSelectionStrategy: 'automatic' as const
+      };
+      
+      // Create a new task manager instance with gateway for this request
+      const { BackgroundTaskManager } = await import('@/lib/background-task-manager');
+      const enhancedTaskManager = new BackgroundTaskManager(undefined, gatewayConfig);
+      task = await enhancedTaskManager.createResponse(model, data.input, background, reasoning);
+    } else {
+      // Use existing task manager for backward compatibility
+      task = await taskManager.createResponse(model, data.input, background, reasoning);
+    }
 
     // Return response status matching Python format
     const responseStatus: ResponseStatus = {
