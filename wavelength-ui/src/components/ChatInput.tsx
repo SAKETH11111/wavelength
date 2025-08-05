@@ -88,7 +88,13 @@ export function ChatInput() {
       
       <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
         <span>
-          {activeChatId ? 'Ready for parallel sessions' : 'Create a new chat to get started'}
+          {activeChatId ? (
+            <>
+              Ready for parallel sessions • Using {activeChat?.model?.split('/')[1] || config.defaultModel.split('/')[1] || 'default'}
+            </>
+          ) : (
+            `Create a new chat to get started • Default: ${config.defaultModel.split('/')[1] || config.defaultModel}`
+          )}
         </span>
         <span>Press Enter to send, Shift+Enter for new line</span>
       </div>

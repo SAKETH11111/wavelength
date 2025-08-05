@@ -71,14 +71,19 @@ export function Sidebar() {
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>
-              <div className="flex items-center gap-2 text-xs">
-                <span className={`w-2 h-2 rounded-full inline-block mr-2 ${
-                  chat.status === 'processing' ? 'bg-yellow-500' :
-                  chat.status === 'error' ? 'bg-red-500' : 'bg-green-500'
-                }`}></span>
-                <span className="text-muted-foreground">
-                  {chat.status === 'processing' ? 'Processing...' :
-                   chat.status === 'error' ? 'Error' : 'Ready'}
+              <div className="flex items-center justify-between gap-2 text-xs">
+                <div className="flex items-center gap-2">
+                  <span className={`w-2 h-2 rounded-full inline-block ${
+                    chat.status === 'processing' ? 'bg-yellow-500' :
+                    chat.status === 'error' ? 'bg-red-500' : 'bg-green-500'
+                  }`}></span>
+                  <span className="text-muted-foreground">
+                    {chat.status === 'processing' ? 'Processing...' :
+                     chat.status === 'error' ? 'Error' : 'Ready'}
+                  </span>
+                </div>
+                <span className="text-xs font-mono text-muted-foreground bg-muted px-1 rounded">
+                  {chat.model.split('/')[1] || chat.model}
                 </span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">

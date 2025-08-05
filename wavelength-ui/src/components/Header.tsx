@@ -1,10 +1,11 @@
 "use client";
 
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { Button } from './ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Badge } from './ui/badge';
 import { Menu, Settings, Moon } from 'lucide-react';
+import { useStore, useActiveChat } from '../lib/store';
 
 interface HeaderProps {
   toggleSidebar: () => void;
@@ -12,6 +13,36 @@ interface HeaderProps {
 }
 
 export function Header({ toggleSidebar, openSettings }: HeaderProps) {
+  const { config, updateConfig } = useStore();
+  const activeChat = useActiveChat();
+  const [selectedModel, setSelectedModel] = useState(config.defaultModel);
+
+  // Update selected model when active chat changes
+  useEffect(() => {
+    if (activeChat) {
+      setSelectedModel(activeChat.model);
+    } else {
+      setSelectedModel(config.defaultModel);
+    }
+  }, [activeChat, config.defaultModel]);
+
+  const handleModelChange = (newModel: string) => {
+    setSelectedModel(newModel);
+    
+    if (activeChat) {
+      // Update the model for the active chat
+      const { chats } = useStore.getState();
+      const updatedChats = chats.map(chat => 
+        chat.id === activeChat.id 
+          ? { ...chat, model: newModel, updatedAt: new Date() }
+          : chat
+      );
+      useStore.setState({ chats: updatedChats });
+    } else {
+      // Update default model in config
+      updateConfig({ defaultModel: newModel });
+    }
+  };
 
   return (
     <div className="chat-header p-4 border-b border-border flex items-center justify-between bg-background">
@@ -26,7 +57,7 @@ export function Header({ toggleSidebar, openSettings }: HeaderProps) {
           <Menu className="w-4 h-4" />
         </Button>
         
-        <Select defaultValue="openai/o3-pro">
+        <Select value={selectedModel} onValueChange={handleModelChange}>
           <SelectTrigger className="w-[200px] bg-background border border-border p-2 font-mono text-foreground cursor-pointer transition-colors hover:border-ring">
             <SelectValue />
           </SelectTrigger>
