@@ -94,7 +94,7 @@ export function Sidebar() {
                 </span>
               </div>
               <div className="text-xs text-muted-foreground mt-1">
-                {chat.totalTokens} tokens • ${chat.totalCost.toFixed(4)}
+                {(chat.totalTokens || 0).toLocaleString()} tokens • ${(chat.totalCost || 0).toFixed(4)}
               </div>
             </div>
           ))

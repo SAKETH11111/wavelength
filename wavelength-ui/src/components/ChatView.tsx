@@ -14,7 +14,10 @@ export function ChatView() {
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (config.autoScroll && messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+      // Use setTimeout to ensure DOM is updated before scrolling
+      setTimeout(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+      }, 100);
     }
   }, [messages, config.autoScroll]);
 
@@ -53,7 +56,7 @@ export function ChatView() {
   const totalCost = messages.reduce((sum, msg) => sum + (msg.cost || 0), 0);
 
   return (
-    <div className="flex-1 flex flex-col">
+    <div className="flex-1 flex flex-col min-h-0">
       {/* Chat summary header */}
       {(config.showCosts || config.showTokens) && messages.length > 0 && totalTokens > 0 && (
         <div className="p-4 border-b border-border bg-muted/30">
@@ -78,7 +81,7 @@ export function ChatView() {
       {/* Messages */}
       <div
         id="chat-messages"
-        className="chat-messages flex-1 overflow-y-auto p-6 flex flex-col gap-4"
+        className="chat-messages flex-1 overflow-y-auto p-6 flex flex-col gap-4 scroll-smooth"
       >
         {messages.map((message) => (
           <Message
@@ -93,7 +96,7 @@ export function ChatView() {
             tokens={config.showTokens ? message.tokens : undefined}
           />
         ))}
-        <div ref={messagesEndRef} />
+        <div ref={messagesEndRef} className="h-4" />
       </div>
     </div>
   );

@@ -410,6 +410,45 @@
     transform: translateX(0);
   }
 
+  /* Markdown content styling */
+  .markdown-content {
+    line-height: 1.7;
+    font-size: 0.95rem;
+  }
+
+  .markdown-content code {
+    font-size: 0.85rem;
+    font-family: 'Geist Mono', var(--font-mono), monospace;
+  }
+
+  .markdown-content pre {
+    font-size: 0.85rem;
+    line-height: 1.5;
+  }
+
+  .markdown-content table {
+    font-size: 0.9rem;
+    line-height: 1.5;
+  }
+
+  .markdown-content blockquote {
+    font-style: italic;
+  }
+
+  .markdown-content h1,
+  .markdown-content h2,
+  .markdown-content h3,
+  .markdown-content h4,
+  .markdown-content h5,
+  .markdown-content h6 {
+    line-height: 1.3;
+  }
+
+  /* Ensure scrollable container */
+  .chat-messages {
+    min-height: 0; /* Important for flex overflow */
+  }
+
   /* Mobile responsive */
   @media (max-width: 768px) {
     .sidebar {
