@@ -45,7 +45,8 @@ export function Header({ toggleSidebar }: HeaderProps) {
   };
 
   const handleSettingsClick = () => {
-    alert('Settings panel coming soon! We\'re working on bringing you comprehensive configuration options.');
+    // Navigate to settings page
+    window.location.href = '/settings/profile';
   };
   
   const handleSignIn = () => {
@@ -159,6 +160,10 @@ export function Header({ toggleSidebar }: HeaderProps) {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={() => window.location.href = '/settings/profile'}>
+                <User className="mr-2 h-4 w-4" />
+                <span>Profile & Settings</span>
+              </DropdownMenuItem>
               <DropdownMenuItem onClick={handleSignOut}>
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Sign out</span>

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { taskManager } from '@/lib/background-task-manager';
 import { UnifiedAPIGateway, createGatewayFromEnv } from '@/lib/api-gateway';
+import { auth } from '@/lib/auth';
+import { UsageTracker } from '@/lib/usage-tracker';
+import { AnonymousSessionManager } from '@/lib/auth/anonymous-session';
 
 export const runtime = 'nodejs';
 
@@ -65,6 +68,12 @@ interface ResponseStatus {
 export async function POST(req: NextRequest) {
   console.log('=== POST /api/responses - Request started ===');
   try {
+    // Get authentication and anonymous session info
+    const session = await auth();
+    const anonymousId = session?.user?.id 
+      ? null 
+      : req.headers.get('x-anonymous-id') || AnonymousSessionManager.getAnonymousId();
+    
     let rawBody: string;
     let data: CreateResponseRequest;
     
@@ -115,6 +124,38 @@ export async function POST(req: NextRequest) {
     const model = data.model || 'openai/o3';
     const background = data.background !== false; // Default to true
     const reasoning = data.reasoning || { effort: 'high', summary: 'auto' };
+    
+    // Extract provider from model (e.g., 'openai/o3' -> 'openai')
+    const provider = model.includes('/') ? model.split('/')[0] : 'openrouter';
+    
+    // Check quota limits before creating the task
+    const quotaCheck = await UsageTracker.checkQuota(session, anonymousId, {
+      provider,
+      model,
+      requestCount: 1,
+      // We'll estimate tokens based on input length (rough estimate)
+      totalTokens: data.input.reduce((sum, msg) => sum + Math.ceil(msg.content.length / 4), 0),
+    });
+    
+    if (!quotaCheck.canProceed) {
+      console.warn('Request blocked by quota limits:', quotaCheck.reasons);
+      return NextResponse.json(
+        { 
+          error: 'Quota limit exceeded',
+          details: {
+            reasons: quotaCheck.reasons,
+            quotaStatus: {
+              remainingRequests: quotaCheck.remainingRequests,
+              remainingTokens: quotaCheck.remainingTokens,
+              remainingCost: quotaCheck.remainingCost,
+              resetTime: quotaCheck.resetTime,
+            },
+            upgradeRequired: !session?.user?.id,
+          }
+        },
+        { status: 429 } // Too Many Requests
+      );
+    }
 
     console.log('Creating background task with:', { model, background, inputLength: data.input.length, useGateway, useBackend });
     
@@ -153,6 +194,16 @@ export async function POST(req: NextRequest) {
         task = await taskManager.createResponse(model, data.input, background, reasoning);
       }
       console.log('Task created successfully:', { id: task.id, status: task.status, model: task.model });
+      
+      // Schedule usage tracking for when task completes
+      // We'll do this in a background process to avoid blocking the response
+      setTimeout(async () => {
+        try {
+          await trackTaskUsage(task.id, session, anonymousId, provider);
+        } catch (error) {
+          console.error('Background usage tracking failed:', error);
+        }
+      }, 0);
     } catch (taskError) {
       console.error('Task creation failed:', taskError);
       // Provide more specific error information
@@ -224,5 +275,74 @@ export async function POST(req: NextRequest) {
     );
   } finally {
     console.log('=== POST /api/responses - Request completed ===');
+  }
+}
+
+/**
+ * Track usage after task completion
+ * This runs in the background to avoid blocking the API response
+ */
+async function trackTaskUsage(
+  taskId: string, 
+  session: any, 
+  anonymousId: string | null, 
+  provider: string
+) {
+  const maxAttempts = 10;
+  const pollInterval = 1000; // 1 second
+  
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    try {
+      const task = await taskManager.retrieveResponse(taskId);
+      
+      if (task?.status === 'completed' && task.usage) {
+        // Record the actual usage from the completed task
+        await UsageTracker.recordUsage(session, anonymousId, {
+          provider,
+          model: task.model,
+          requestCount: 1,
+          inputTokens: task.usage.prompt_tokens,
+          outputTokens: task.usage.completion_tokens,
+          reasoningTokens: task.usage.reasoning_tokens || 0,
+          totalTokens: task.usage.total_tokens,
+          cost: task.usage.cost || task.cost,
+        });
+        
+        console.log('Usage recorded for task:', taskId, {
+          provider,
+          model: task.model,
+          tokens: task.usage.total_tokens,
+          cost: task.usage.cost || task.cost,
+        });
+        return;
+      } else if (task?.status === 'failed' || task?.status === 'cancelled') {
+        // Still record the request attempt even if it failed
+        await UsageTracker.recordUsage(session, anonymousId, {
+          provider,
+          model: task.model,
+          requestCount: 1,
+          cost: 0, // No cost for failed requests
+        });
+        return;
+      }
+      
+      // Task not completed yet, wait and retry
+      await new Promise(resolve => setTimeout(resolve, pollInterval));
+    } catch (error) {
+      console.error(`Usage tracking attempt ${attempt + 1} failed:`, error);
+      if (attempt === maxAttempts - 1) {
+        // Final attempt failed, record at least the request
+        try {
+          await UsageTracker.recordUsage(session, anonymousId, {
+            provider,
+            model: 'unknown',
+            requestCount: 1,
+            cost: 0,
+          });
+        } catch (finalError) {
+          console.error('Final usage recording attempt failed:', finalError);
+        }
+      }
+    }
   }
 }

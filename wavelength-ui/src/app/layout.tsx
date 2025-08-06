@@ -1,8 +1,7 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
-// Temporarily disabled until auth is fully set up
-// import { SessionProvider } from "next-auth/react";
+import { SessionProvider } from "next-auth/react";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
@@ -50,8 +49,7 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        {/* Temporarily disabled until auth is fully set up */}
-        {/* <SessionProvider> */}
+        <SessionProvider>
           <ThemeProvider
             defaultTheme="dark"
             storageKey="wavelength-theme"
@@ -60,7 +58,7 @@ export default function RootLayout({
               {children}
             </AuthProvider>
           </ThemeProvider>
-        {/* </SessionProvider> */}
+        </SessionProvider>
       </body>
     </html>
   );

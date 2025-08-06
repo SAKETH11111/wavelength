@@ -1,5 +1,6 @@
 import { useStore } from './store';
 import { backendClient } from './backend-client';
+import { AnonymousSessionManager } from './auth/anonymous-session';
 
 export interface CreateResponseRequest {
   model: string;
@@ -117,10 +118,18 @@ export async function sendMessageToServer(
     } catch (backendError) {
       console.log('Backend failed, falling back to frontend:', backendError);
       // Fallback to frontend API
+      const { auth } = useStore.getState();
+      const anonymousId = auth.user.sessionType === 'anonymous' 
+        ? auth.anonymousId || AnonymousSessionManager.getAnonymousId()
+        : null;
+      
       const response = await fetch('/api/responses', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          ...(anonymousId && {
+            'x-anonymous-id': anonymousId,
+          }),
         },
         body: JSON.stringify(payload),
       });

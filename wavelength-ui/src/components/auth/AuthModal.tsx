@@ -1,8 +1,7 @@
 'use client'
 
 import React from 'react'
-// Temporarily disabled until auth is fully set up
-// import { signIn } from 'next-auth/react'
+import { signIn } from 'next-auth/react'
 import { useStore } from '@/lib/store'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -57,16 +56,19 @@ export const AuthModal: React.FC = () => {
 
   const handleSignIn = async (provider: 'google' | 'github' | 'email') => {
     try {
-      // Demo implementation - show alert for now
-      alert(`Demo: ${provider} sign-in would happen here. Full authentication will be implemented in the next phase.`)
-      // Temporarily close modal for demo
+      // Close the modal before redirecting
       handleClose()
-      // await signIn(provider, {
-      //   callbackUrl: window.location.href,
-      //   redirect: false
-      // })
+      
+      // Start the sign-in flow
+      // The migration will be handled by AuthMigrationHandler after successful auth
+      await signIn(provider, {
+        callbackUrl: window.location.href,
+        redirect: true
+      })
     } catch (error) {
       console.error('Sign in error:', error)
+      // Reopen modal on error
+      setAuthModal(true, auth.authTrigger)
     }
   }
 
@@ -148,8 +150,10 @@ export const AuthModal: React.FC = () => {
           </div>
 
           <div className="text-xs text-center text-muted-foreground">
-            Your anonymous chats will be preserved when you sign in.
+            <strong>Your data will be automatically preserved!</strong>
             <br />
+            All your chats, preferences, and API keys will be securely transferred to your account.
+            <br /><br />
             By continuing, you agree to our Terms of Service and Privacy Policy.
           </div>
         </div>

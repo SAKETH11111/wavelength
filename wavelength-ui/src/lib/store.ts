@@ -64,6 +64,50 @@ export interface AuthUser {
   sessionType: 'anonymous' | 'authenticated';
 }
 
+export interface UserProfile {
+  displayName?: string | null;
+  bio?: string | null;
+  timezone?: string | null;
+  language?: string | null;
+  theme?: 'light' | 'dark' | 'auto' | null;
+  preferences?: Record<string, any>;
+}
+
+export interface ApiKey {
+  id: string;
+  provider: string;
+  keyName: string | null;
+  isActive: boolean;
+  dailyLimit: number | null;
+  monthlyLimit: number | null;
+  usedToday: number;
+  usedThisMonth: number;
+  lastUsed: string | null;
+  lastValidated: string | null;
+  isValid: boolean;
+  validationError: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UsageStats {
+  totalRequests: number;
+  totalTokens: number;
+  totalCost: number;
+  dailyUsage: Array<{
+    date: string;
+    requests: number;
+    tokens: number;
+    cost: number;
+  }>;
+  providerBreakdown: Array<{
+    provider: string;
+    requests: number;
+    tokens: number;
+    cost: number;
+  }>;
+}
+
 export interface UserLimits {
   dailyMessages: number;
   usedMessages: number;
@@ -80,9 +124,24 @@ export interface AuthState {
   authTrigger?: 'premium-model' | 'daily-limit' | 'advanced-features' | 'data-sync';
 }
 
+export interface ProfileState {
+  profile: UserProfile | null;
+  apiKeys: ApiKey[];
+  usageStats: UsageStats | null;
+  quotaLimits: any[];
+  loading: {
+    profile: boolean;
+    apiKeys: boolean;
+    usage: boolean;
+  };
+}
+
 export interface AppState {
   // Authentication state
   auth: AuthState;
+  
+  // Profile management
+  profile: ProfileState;
   
   // Chat management
   chats: Chat[];
@@ -155,6 +214,16 @@ export interface AppActions {
   canAccessModel: (modelId: string) => boolean;
   shouldPromptForAuth: (modelId: string) => boolean;
   
+  // Profile actions
+  loadProfile: () => Promise<void>;
+  updateProfile: (updates: Partial<UserProfile>) => Promise<void>;
+  loadApiKeys: () => Promise<void>;
+  addApiKey: (keyData: { provider: string; apiKey: string; keyName?: string; dailyLimit?: number; monthlyLimit?: number }) => Promise<void>;
+  updateApiKey: (keyId: string, updates: Partial<ApiKey>) => Promise<void>;
+  deleteApiKey: (keyId: string) => Promise<void>;
+  loadUsageStats: (period?: string, provider?: string) => Promise<void>;
+  setProfileLoading: (type: keyof ProfileState['loading'], loading: boolean) => void;
+  
   // UI actions
   toggleSidebar: () => void;
   toggleSettings: () => void;
@@ -207,6 +276,19 @@ export const useStore = create<Store>()(
           availableModels: [],
         },
         showAuthModal: false,
+      },
+      
+      // Initial profile state
+      profile: {
+        profile: null,
+        apiKeys: [],
+        usageStats: null,
+        quotaLimits: [],
+        loading: {
+          profile: false,
+          apiKeys: false,
+          usage: false,
+        },
       },
       
       // Initial state
@@ -271,7 +353,7 @@ export const useStore = create<Store>()(
           totalCost: 0,
           totalTokens: 0,
           status: 'idle',
-          userId: auth.user.sessionType === 'authenticated' ? auth.user.id : undefined,
+          userId: auth.user.sessionType === 'authenticated' ? auth.user.id || undefined : undefined,
           anonymousId: auth.user.sessionType === 'anonymous' ? auth.anonymousId : undefined,
           isAnonymous: auth.user.sessionType === 'anonymous',
         };
@@ -574,9 +656,9 @@ export const useStore = create<Store>()(
               ...state.auth,
               user: {
                 id: session.user.id,
-                email: session.user.email,
-                name: session.user.name,
-                image: session.user.image,
+                email: session.user.email || undefined,
+                name: session.user.name || undefined,
+                image: session.user.image || undefined,
                 tier: session.user.tier || 'free',
                 sessionType: 'authenticated',
               },
@@ -590,6 +672,25 @@ export const useStore = create<Store>()(
               },
             },
           }));
+          
+          // Initialize usage quotas for new authenticated users
+          setTimeout(async () => {
+            try {
+              const response = await fetch('/api/usage/init');
+              const data = await response.json();
+              
+              if (data.success && data.data.needsInitialization) {
+                console.log('Initializing usage quotas for new user');
+                await fetch('/api/usage/init', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ tier: session.user.tier || 'free' }),
+                });
+              }
+            } catch (error) {
+              console.error('Failed to initialize usage quotas:', error);
+            }
+          }, 0);
         } else {
           // Anonymous user
           set((state) => ({
@@ -669,6 +770,223 @@ export const useStore = create<Store>()(
           auth.user.sessionType === 'authenticated'
         );
       },
+      
+      // Profile actions
+      loadProfile: async () => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        get().setProfileLoading('profile', true);
+        try {
+          const response = await fetch('/api/profile');
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                profile: data.data.profile,
+              },
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to load profile:', error);
+        } finally {
+          get().setProfileLoading('profile', false);
+        }
+      },
+      
+      updateProfile: async (updates) => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        try {
+          const response = await fetch('/api/profile', {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updates),
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                profile: { ...state.profile.profile, ...updates },
+              },
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to update profile:', error);
+          throw error;
+        }
+      },
+      
+      loadApiKeys: async () => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        get().setProfileLoading('apiKeys', true);
+        try {
+          const response = await fetch('/api/profile/api-keys');
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                apiKeys: data.data,
+              },
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to load API keys:', error);
+        } finally {
+          get().setProfileLoading('apiKeys', false);
+        }
+      },
+      
+      addApiKey: async (keyData) => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        try {
+          const response = await fetch('/api/profile/api-keys', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(keyData),
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                apiKeys: [data.data, ...state.profile.apiKeys],
+              },
+            }));
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error('Failed to add API key:', error);
+          throw error;
+        }
+      },
+      
+      updateApiKey: async (keyId, updates) => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        try {
+          const response = await fetch(`/api/profile/api-keys/${keyId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(updates),
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                apiKeys: state.profile.apiKeys.map((key) => 
+                  key.id === keyId ? { ...key, ...updates } : key
+                ),
+              },
+            }));
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error('Failed to update API key:', error);
+          throw error;
+        }
+      },
+      
+      deleteApiKey: async (keyId) => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        try {
+          const response = await fetch(`/api/profile/api-keys/${keyId}`, {
+            method: 'DELETE',
+          });
+          
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                apiKeys: state.profile.apiKeys.filter((key) => key.id !== keyId),
+              },
+            }));
+          } else {
+            throw new Error(data.error);
+          }
+        } catch (error) {
+          console.error('Failed to delete API key:', error);
+          throw error;
+        }
+      },
+      
+      loadUsageStats: async (period = 'month', provider) => {
+        const { auth } = get();
+        if (auth.user.sessionType !== 'authenticated') return;
+        
+        get().setProfileLoading('usage', true);
+        try {
+          let url = `/api/profile/usage?period=${period}`;
+          if (provider) {
+            url += `&provider=${provider}`;
+          }
+          
+          const response = await fetch(url);
+          const data = await response.json();
+          
+          if (data.success) {
+            set((state) => ({
+              profile: {
+                ...state.profile,
+                usageStats: {
+                  totalRequests: data.data.totals.requests,
+                  totalTokens: data.data.totals.tokens.total,
+                  totalCost: data.data.totals.cost,
+                  dailyUsage: data.data.dailyUsage,
+                  providerBreakdown: data.data.breakdown.providers,
+                },
+                quotaLimits: data.data.quotaLimits,
+              },
+            }));
+          }
+        } catch (error) {
+          console.error('Failed to load usage stats:', error);
+        } finally {
+          get().setProfileLoading('usage', false);
+        }
+      },
+      
+      setProfileLoading: (type, loading) => {
+        set((state) => ({
+          profile: {
+            ...state.profile,
+            loading: {
+              ...state.profile.loading,
+              [type]: loading,
+            },
+          },
+        }));
+      },
     }),
     {
       name: 'wavelength-store',
@@ -680,6 +998,7 @@ export const useStore = create<Store>()(
         isSidebarOpen: state.isSidebarOpen,
         providerStatuses: state.providerStatuses,
         backendMode: state.backendMode,
+        // Profile data is not persisted as it's loaded from server
       }),
     }
   )

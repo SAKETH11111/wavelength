@@ -1,0 +1,335 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// NextAuth.js required tables
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model User {
+  id              String    @id @default(cuid())
+  name            String?
+  email           String?   @unique
+  emailVerified   DateTime?
+  image           String?
+  tier            String    @default("free") // 'free' | 'pro'
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  lastLoginAt     DateTime  @default(now())
+  isActive        Boolean   @default(true)
+  
+  // Anonymous user migration support
+  anonymousId     String?   @unique
+
+  accounts        Account[]
+  sessions        Session[]
+  profile         UserProfile?
+  apiKeys         UserApiKey[]
+  chats           Chat[]
+  messages        Message[]
+  usageRecords    UsageRecord[]
+  quotaLimits     UserQuotaLimit[]
+
+  @@map("users")
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+  @@map("verificationtokens")
+}
+
+// Extended user profile management
+model UserProfile {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  displayName     String?
+  avatarUrl       String?
+  bio             String?
+  timezone        String?
+  language        String   @default("en")
+  theme           String   @default("dark") // 'light' | 'dark' | 'auto'
+  
+  // UI Preferences
+  preferences     Json     @default("{}")
+  
+  // Feature flags per user
+  features        Json     @default("{}")
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_profiles")
+}
+
+// Encrypted API key storage per provider
+model UserApiKey {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String   // 'openrouter' | 'openai' | 'anthropic' | 'google' | 'xai'
+  keyName         String?  // Custom name for multiple keys per provider
+  encryptedKey    String   // Encrypted API key
+  keyHash         String   // Hash for verification without decryption
+  isActive        Boolean  @default(true)
+  
+  // Usage limits per key
+  dailyLimit      Int?
+  monthlyLimit    Int?
+  usedToday       Int      @default(0)
+  usedThisMonth   Int      @default(0)
+  lastUsed        DateTime?
+  
+  // Validation
+  lastValidated   DateTime?
+  isValid         Boolean  @default(true)
+  validationError String?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, keyName])
+  @@index([userId, provider])
+  @@map("user_api_keys")
+}
+
+// Chat management with user attribution
+model Chat {
+  id              String   @id @default(cuid())
+  userId          String?  // Nullable for anonymous chats
+  anonymousId     String?  // For anonymous user sessions
+  title           String
+  model           String   // Model used for this chat
+  provider        String?  // Provider used
+  isAnonymous     Boolean  @default(false)
+  
+  // Chat metadata
+  totalCost       Decimal  @default(0) @db.Decimal(10, 6)
+  totalTokens     Int      @default(0)
+  messageCount    Int      @default(0)
+  status          String   @default("idle") // 'idle' | 'processing' | 'error'
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  lastMessageAt   DateTime @default(now())
+
+  user            User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  messages        Message[]
+
+  @@index([userId])
+  @@index([anonymousId])
+  @@index([createdAt])
+  @@map("chats")
+}
+
+// Message storage with cost tracking
+model Message {
+  id              String   @id @default(cuid())
+  chatId          String
+  userId          String?  // Nullable for anonymous messages
+  role            String   // 'user' | 'assistant'
+  content         String   @db.Text
+  reasoning       String?  @db.Text
+  model           String?  // Model used for this message
+  
+  // Token and cost tracking
+  inputTokens     Int?
+  reasoningTokens Int?
+  outputTokens    Int?
+  totalTokens     Int?
+  cost            Decimal? @db.Decimal(10, 6)
+  duration        Int?     // Response time in milliseconds
+  
+  // Metadata
+  metadata        Json     @default("{}")
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  chat            Chat     @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([chatId])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("messages")
+}
+
+// Usage tracking for analytics and quotas
+model UsageRecord {
+  id              String   @id @default(cuid())
+  userId          String
+  provider        String
+  model           String
+  
+  // Usage metrics
+  requestCount    Int      @default(1)
+  totalTokens     Int      @default(0)
+  inputTokens     Int      @default(0)
+  outputTokens    Int      @default(0)
+  reasoningTokens Int      @default(0)
+  totalCost       Decimal  @default(0) @db.Decimal(10, 6)
+  
+  // Time periods for aggregation
+  date            DateTime @db.Date
+  hour            Int      // 0-23 for hourly tracking
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, provider, model, date, hour])
+  @@index([userId, date])
+  @@index([provider, model])
+  @@map("usage_records")
+}
+
+// User quota and limits management
+model UserQuotaLimit {
+  id              String   @id @default(cuid())
+  userId          String
+  type            String   // 'daily' | 'monthly' | 'provider' | 'model'
+  provider        String?  // Specific provider limit
+  model           String?  // Specific model limit
+  
+  // Limits
+  requestLimit    Int?
+  tokenLimit      Int?
+  costLimit       Decimal? @db.Decimal(10, 6)
+  
+  // Current usage (reset based on type)
+  usedRequests    Int      @default(0)
+  usedTokens      Int      @default(0)
+  usedCost        Decimal  @default(0) @db.Decimal(10, 6)
+  
+  // Reset timing
+  resetAt         DateTime
+  lastReset       DateTime @default(now())
+  
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, type, provider, model])
+  @@index([userId, type])
+  @@map("user_quota_limits")
+}
+
+// System-wide analytics and monitoring
+model SystemAnalytics {
+  id              String   @id @default(cuid())
+  metric          String   // 'total_users', 'active_users', 'total_messages', etc.
+  value           Decimal  @db.Decimal(15, 6)
+  metadata        Json     @default("{}")
+  
+  date            DateTime @db.Date
+  hour            Int?     // Optional hourly granularity
+  
+  createdAt       DateTime @default(now())
+
+  @@unique([metric, date, hour])
+  @@index([metric, date])
+  @@map("system_analytics")
+}
+
+// Model access control and pricing
+model ModelConfig {
+  id              String   @id @default(cuid())
+  modelId         String   @unique
+  provider        String
+  displayName     String
+  description     String?
+  
+  // Access control
+  tierAccess      String[] // ['anonymous', 'free', 'pro']
+  isActive        Boolean  @default(true)
+  
+  // Pricing (per 1K tokens)
+  inputPrice      Decimal? @db.Decimal(10, 6)
+  outputPrice     Decimal? @db.Decimal(10, 6)
+  reasoningPrice  Decimal? @db.Decimal(10, 6)
+  
+  // Limits
+  contextLength   Int?
+  outputLimit     Int?
+  
+  // Features
+  supportsReasoning Boolean @default(false)
+  supportsImages    Boolean @default(false)
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([provider])
+  @@index([tierAccess])
+  @@map("model_configs")
+}
+
+// Anonymous session tracking for migration
+model AnonymousSession {
+  id              String   @id @default(cuid())
+  anonymousId     String   @unique
+  
+  // Session data for migration
+  sessionData     Json     @default("{}")
+  
+  // Usage tracking
+  messageCount    Int      @default(0)
+  lastUsed        DateTime @default(now())
+  
+  // Migration tracking
+  migratedToUserId String?
+  migratedAt      DateTime?
+  
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([anonymousId])
+  @@index([lastUsed])
+  @@map("anonymous_sessions")
+}

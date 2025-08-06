@@ -7,6 +7,7 @@ import { ChatView } from './ChatView';
 import { ChatInput } from './ChatInput';
 import { useStore } from '../lib/store';
 import { useBackendInit } from '../hooks/useBackendInit';
+import { useUsageInit } from '../hooks/useUsageInit';
 
 export function Layout() {
   const {
@@ -16,6 +17,9 @@ export function Layout() {
   
   // Initialize backend connection and health checking
   useBackendInit();
+  
+  // Initialize usage tracking
+  useUsageInit();
 
   // Set connection status on mount
   useEffect(() => {

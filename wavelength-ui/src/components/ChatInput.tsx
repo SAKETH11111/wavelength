@@ -8,6 +8,8 @@ import { useStore, useActiveChat } from '../lib/store';
 import { sendMessageToServer } from '../lib/api';
 import { ModelSelector } from './ModelSelector';
 import { MessageLimitWarning } from './auth/MessageLimitWarning';
+import { UsageWarning } from './UsageWarning';
+import { useUsageTracking } from '@/hooks/useUsageTracking';
 import { AnonymousSessionManager } from '../lib/auth/anonymous-session';
 
 export function ChatInput() {
@@ -15,6 +17,7 @@ export function ChatInput() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedModel, setSelectedModel] = useState('');
+  const [quotaCheckInProgress, setQuotaCheckInProgress] = useState(false);
   
   const { 
     createNewChat, 
@@ -27,6 +30,8 @@ export function ChatInput() {
     setAuthModal,
     incrementMessageCount
   } = useStore();
+  
+  const { checkQuota, loadUsageStatus } = useUsageTracking();
   const activeChat = useActiveChat();
 
   // Update selected model when active chat changes
@@ -64,23 +69,47 @@ export function ChatInput() {
   };
 
   const handleSendMessage = async () => {
-    if (!message.trim() || isLoading) {
+    if (!message.trim() || isLoading || quotaCheckInProgress) {
       return;
     }
     
-    // Check if user has reached daily limit
-    if (auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit()) {
-      setAuthModal(true, 'daily-limit');
-      return;
-    }
-    
-    // Check if user can access the selected model
     const modelToUse = selectedModel || activeChat?.model || config.defaultModel;
+    const provider = modelToUse.includes('/') ? modelToUse.split('/')[0] : 'openrouter';
+    
+    // Check model access first
     if (!canAccessModel(modelToUse)) {
       if (shouldPromptForAuth(modelToUse)) {
         setAuthModal(true, 'premium-model');
         return;
       }
+    }
+    
+    // Check quota limits before proceeding
+    setQuotaCheckInProgress(true);
+    try {
+      const quotaCheck = await checkQuota(
+        provider, 
+        modelToUse, 
+        Math.ceil(message.trim().length / 4), // Rough token estimate
+        undefined // Let the backend estimate cost
+      );
+      
+      if (!quotaCheck.canProceed) {
+        console.warn('Message blocked by quota:', quotaCheck.reasons);
+        
+        if (quotaCheck.upgradeRequired) {
+          setAuthModal(true, 'daily-limit');
+        } else {
+          // Show error with quota details
+          setError(`Usage limit exceeded: ${quotaCheck.reasons.join(', ')}`);
+        }
+        return;
+      }
+    } catch (quotaError) {
+      console.error('Quota check failed:', quotaError);
+      // Continue with request if quota check fails
+    } finally {
+      setQuotaCheckInProgress(false);
     }
     
     const messageContent = message.trim();
@@ -100,11 +129,18 @@ export function ChatInput() {
       // Increment message count for anonymous users
       const reachedLimit = incrementMessageCount();
       
-      // Send message to server
+      // Send message to server with anonymous ID header for tracking
       const { setChatStatus } = useStore.getState();
       await sendMessageToServer(messageContent, chatId, selectedModel || activeChat?.model || config.defaultModel, setChatStatus);
       
       console.log('Message sent successfully');
+      
+      // Refresh usage status after successful send
+      try {
+        await loadUsageStatus();
+      } catch (refreshError) {
+        console.error('Failed to refresh usage status:', refreshError);
+      }
       
       // Check if user reached limit after sending
       if (reachedLimit) {
@@ -122,10 +158,21 @@ export function ChatInput() {
         errorMessage = error.message;
       }
       
-      // Set error state for user feedback
-      setError(errorMessage.includes('Server responded with status 500') 
-        ? 'Server error occurred. Please try again.' 
-        : errorMessage);
+      // Handle quota-specific errors
+      if (errorMessage.includes('Quota limit exceeded') || errorMessage.includes('Usage limit exceeded')) {
+        setError('Usage limit exceeded. Please wait for reset time or upgrade your plan.');
+        // Refresh usage status to show current limits
+        try {
+          await loadUsageStatus();
+        } catch (refreshError) {
+          console.error('Failed to refresh usage status:', refreshError);
+        }
+      } else {
+        // Set general error state for user feedback
+        setError(errorMessage.includes('Server responded with status 500') 
+          ? 'Server error occurred. Please try again.' 
+          : errorMessage);
+      }
       
       // Restore message on error
       setMessage(messageContent);
@@ -139,14 +186,15 @@ export function ChatInput() {
     element.style.height = Math.min(element.scrollHeight, 200) + 'px';
   };
 
-  const isDisabled = isLoading || (
+  const isDisabled = isLoading || quotaCheckInProgress || (
     auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit()
   );
 
   return (
     <div className="chat-input-area p-4 border-t border-border bg-background">
-      {/* Daily limit warning */}
+      {/* Usage warnings */}
       <MessageLimitWarning className="mb-3" />
+      <UsageWarning />
       
       {error && (
         <div className="mb-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
