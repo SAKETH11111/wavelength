@@ -1,6 +1,9 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import { ThemeProvider } from "@/components/ThemeProvider";
+// Temporarily disabled until auth is fully set up
+// import { SessionProvider } from "next-auth/react";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 import "./globals.css";
 
 const geistSans = Geist({
@@ -47,12 +50,17 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
         suppressHydrationWarning
       >
-        <ThemeProvider
-          defaultTheme="dark"
-          storageKey="wavelength-theme"
-        >
-          {children}
-        </ThemeProvider>
+        {/* Temporarily disabled until auth is fully set up */}
+        {/* <SessionProvider> */}
+          <ThemeProvider
+            defaultTheme="dark"
+            storageKey="wavelength-theme"
+          >
+            <AuthProvider>
+              {children}
+            </AuthProvider>
+          </ThemeProvider>
+        {/* </SessionProvider> */}
       </body>
     </html>
   );

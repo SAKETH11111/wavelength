@@ -49,8 +49,8 @@ const fallbackModels: ModelInfo[] = [
     supportsStreaming: true,
   },
   {
-    id: 'openai/gpt-4o-mini',
-    name: 'GPT-4o Mini',
+    id: 'openai/gpt-4.1-mini',
+    name: 'GPT-4.1 Mini',
     provider: 'OpenAI',
     contextLength: 128000,
     inputCostPer1M: 0.15,
@@ -122,8 +122,8 @@ const fallbackModels: ModelInfo[] = [
   },
   // Gemini series
   {
-    id: 'google/gemini-2.0-flash-exp',
-    name: 'Gemini 2.0 Flash Experimental',
+    id: 'google/gemini-2.5-flash-exp',
+    name: 'Gemini 2.5 Flash Experimental',
     provider: 'Google',
     contextLength: 1048576,
     inputCostPer1M: 0.075,
@@ -219,9 +219,23 @@ async function fetchOpenRouterModels(): Promise<ModelInfo[]> {
       else if (model.id.startsWith('mistralai/')) providerName = 'Mistral';
       else if (model.id.startsWith('meta-llama/')) providerName = 'Meta';
       
+      // Map known model IDs to correct names per user feedback
+      let modelId = model.id;
+      let modelName = model.name || model.id.split('/').pop() || model.id;
+      
+      // Update incorrect model names to correct ones
+      if (model.id.includes('gemini-2.0-flash-exp')) {
+        modelId = modelId.replace('gemini-2.0-flash-exp', 'gemini-2.5-flash-exp');
+        modelName = modelName.replace('2.0', '2.5');
+      }
+      if (model.id.includes('gpt-4o-mini')) {
+        modelId = modelId.replace('gpt-4o-mini', 'gpt-4.1-mini');
+        modelName = modelName.replace('4o', '4.1');
+      }
+      
       return {
-        id: model.id,
-        name: model.name || model.id.split('/').pop() || model.id,
+        id: modelId,
+        name: modelName,
         provider: providerName,
         contextLength: model.context_length || 4096,
         inputCostPer1M: model.pricing?.prompt ? parseFloat(model.pricing.prompt) * 1000000 : 0,

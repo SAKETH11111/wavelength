@@ -2,6 +2,9 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { ModelInfo, ProviderType } from './providers/types';
 import { backendClient, BackendHealth } from './backend-client';
+import type { Session } from 'next-auth';
+import { AnonymousSessionManager } from './auth/anonymous-session';
+import { ModelAccessControl, updateModelAccessRules } from './auth/model-access';
 
 export interface Message {
   id: string;
@@ -29,6 +32,9 @@ export interface Chat {
   totalCost: number;
   totalTokens: number;
   status: 'idle' | 'processing' | 'error';
+  userId?: string;
+  anonymousId?: string;
+  isAnonymous: boolean;
 }
 
 export interface ProviderStatus {
@@ -48,7 +54,36 @@ export interface ProviderConfig {
   priority: number; // For fallback ordering
 }
 
+export interface AuthUser {
+  id: string | null;
+  email?: string;
+  name?: string;
+  image?: string;
+  provider?: 'google' | 'github' | 'email';
+  tier: 'anonymous' | 'free' | 'pro';
+  sessionType: 'anonymous' | 'authenticated';
+}
+
+export interface UserLimits {
+  dailyMessages: number;
+  usedMessages: number;
+  resetTime: Date;
+  availableModels: string[];
+}
+
+export interface AuthState {
+  user: AuthUser;
+  session: Session | null;
+  anonymousId: string;
+  limits: UserLimits;
+  showAuthModal: boolean;
+  authTrigger?: 'premium-model' | 'daily-limit' | 'advanced-features' | 'data-sync';
+}
+
 export interface AppState {
+  // Authentication state
+  auth: AuthState;
+  
   // Chat management
   chats: Chat[];
   activeChatId: string | null;
@@ -112,6 +147,14 @@ export interface AppActions {
   addMessage: (chatId: string, message: Omit<Message, 'id' | 'timestamp'>) => Message;
   updateMessage: (chatId: string, messageId: string, updates: Partial<Message>) => void;
   
+  // Authentication actions
+  initializeAuth: (session?: Session | null) => void;
+  setAuthModal: (show: boolean, trigger?: AuthState['authTrigger']) => void;
+  updateAuthState: (updates: Partial<AuthState>) => void;
+  incrementMessageCount: () => boolean; // Returns true if limit reached
+  canAccessModel: (modelId: string) => boolean;
+  shouldPromptForAuth: (modelId: string) => boolean;
+  
   // UI actions
   toggleSidebar: () => void;
   toggleSettings: () => void;
@@ -148,6 +191,24 @@ type Store = AppState & AppActions;
 export const useStore = create<Store>()(
   persist(
     (set, get) => ({
+      // Initial authentication state
+      auth: {
+        user: {
+          id: null,
+          tier: 'anonymous',
+          sessionType: 'anonymous',
+        },
+        session: null,
+        anonymousId: '',
+        limits: {
+          dailyMessages: 50,
+          usedMessages: 0,
+          resetTime: new Date(),
+          availableModels: [],
+        },
+        showAuthModal: false,
+      },
+      
       // Initial state
       chats: [],
       activeChatId: null,
@@ -168,7 +229,7 @@ export const useStore = create<Store>()(
         },
         
         // General settings
-        defaultModel: 'openai/gpt-oss-20b',
+        defaultModel: 'openai/gpt-4.1-mini',
         defaultProvider: 'auto' as const,
         showReasoning: true,
         showTokens: true,
@@ -199,6 +260,7 @@ export const useStore = create<Store>()(
         // Use a more predictable ID generation to avoid hydration mismatches
         const timestamp = typeof window !== 'undefined' ? Date.now() : 1;
         const random = typeof window !== 'undefined' ? Math.random().toString(36).substr(2, 9) : 'initial';
+        const { auth } = get();
         const newChat: Chat = {
           id: `chat-${timestamp}-${random}`,
           title: 'New Chat',
@@ -209,6 +271,9 @@ export const useStore = create<Store>()(
           totalCost: 0,
           totalTokens: 0,
           status: 'idle',
+          userId: auth.user.sessionType === 'authenticated' ? auth.user.id : undefined,
+          anonymousId: auth.user.sessionType === 'anonymous' ? auth.anonymousId : undefined,
+          isAnonymous: auth.user.sessionType === 'anonymous',
         };
 
         set((state) => ({
@@ -427,6 +492,8 @@ export const useStore = create<Store>()(
       
       setAvailableModels: (models) => {
         set({ availableModels: models });
+        // Update model access rules whenever models are set
+        updateModelAccessRules(models);
       },
 
       // Connection actions
@@ -493,6 +560,114 @@ export const useStore = create<Store>()(
       
       setBackendAvailable: (available) => {
         set({ backendAvailable: available });
+      },
+      
+      // Authentication actions
+      initializeAuth: (session) => {
+        const anonymousId = AnonymousSessionManager.getAnonymousId();
+        const anonymousLimits = AnonymousSessionManager.getAnonymousLimits();
+        
+        if (session?.user) {
+          // Authenticated user
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              user: {
+                id: session.user.id,
+                email: session.user.email,
+                name: session.user.name,
+                image: session.user.image,
+                tier: session.user.tier || 'free',
+                sessionType: 'authenticated',
+              },
+              session,
+              anonymousId,
+              limits: {
+                dailyMessages: session.user.tier === 'pro' ? 5000 : 500,
+                usedMessages: 0, // TODO: Fetch from server
+                resetTime: new Date(Date.now() + 24 * 60 * 60 * 1000),
+                availableModels: ModelAccessControl.getAccessibleModels(true, session.user.tier || 'free').map(r => r.id),
+              },
+            },
+          }));
+        } else {
+          // Anonymous user
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              user: {
+                id: null,
+                tier: 'anonymous',
+                sessionType: 'anonymous',
+              },
+              session: null,
+              anonymousId,
+              limits: {
+                dailyMessages: 50,
+                usedMessages: anonymousLimits.usedMessages,
+                resetTime: anonymousLimits.resetTime,
+                availableModels: ModelAccessControl.getAccessibleModels(false, 'anonymous').map(r => r.id),
+              },
+            },
+          }));
+        }
+      },
+      
+      setAuthModal: (show, trigger) => {
+        set((state) => ({
+          auth: {
+            ...state.auth,
+            showAuthModal: show,
+            authTrigger: trigger,
+          },
+        }));
+      },
+      
+      updateAuthState: (updates) => {
+        set((state) => ({
+          auth: { ...state.auth, ...updates },
+        }));
+      },
+      
+      incrementMessageCount: () => {
+        const { auth } = get();
+        
+        if (auth.user.sessionType === 'anonymous') {
+          const newCount = AnonymousSessionManager.incrementUsedMessages();
+          const hasReachedLimit = AnonymousSessionManager.hasReachedLimit();
+          
+          set((state) => ({
+            auth: {
+              ...state.auth,
+              limits: {
+                ...state.auth.limits,
+                usedMessages: newCount,
+              },
+            },
+          }));
+          
+          return hasReachedLimit;
+        }
+        
+        // TODO: Track authenticated user message counts
+        return false;
+      },
+      
+      canAccessModel: (modelId) => {
+        const { auth } = get();
+        return ModelAccessControl.canAccessModel(
+          modelId,
+          auth.user.sessionType === 'authenticated',
+          auth.user.tier
+        );
+      },
+      
+      shouldPromptForAuth: (modelId) => {
+        const { auth } = get();
+        return ModelAccessControl.shouldPromptAuth(
+          modelId,
+          auth.user.sessionType === 'authenticated'
+        );
       },
     }),
     {

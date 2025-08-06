@@ -11,6 +11,9 @@ import {
 import { Input } from "./ui/input";
 import { Search } from "lucide-react";
 import { useStore } from "../lib/store";
+import { ModelAccessControl, updateModelAccessRules, modelAccessRules } from "../lib/auth/model-access";
+import { Lock } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 interface ModelSelectorProps {
   value: string;
@@ -19,21 +22,46 @@ interface ModelSelectorProps {
   placeholder?: string;
 }
 
+interface ModelForDisplay {
+  id: string;
+  name: string;
+  provider: string;
+  tier: 'free' | 'premium';
+  requiresAuth: boolean;
+  description?: string;
+  canAccess: boolean;
+}
+
 export function ModelSelector({
   value,
   onChange,
   className,
   placeholder = "Select model...",
 }: ModelSelectorProps) {
-  const { availableModels, refreshProviderModels } = useStore();
+  const { 
+    availableModels, 
+    refreshProviderModels, 
+    auth, 
+    canAccessModel, 
+    shouldPromptForAuth,
+    setAuthModal 
+  } = useStore();
   const [searchQuery, setSearchQuery] = useState("");
 
-  // Refresh models on component mount
+  // Refresh models on component mount and update access rules
   useEffect(() => {
-    if (availableModels.length === 0) {
-      refreshProviderModels();
-    }
-  }, [availableModels.length, refreshProviderModels]);
+    const fetchAndUpdateModels = async () => {
+      if (availableModels.length === 0) {
+        await refreshProviderModels();
+      }
+      // Update model access rules with fetched models
+      if (availableModels.length > 0) {
+        updateModelAccessRules(availableModels);
+      }
+    };
+    
+    fetchAndUpdateModels();
+  }, [availableModels.length, refreshProviderModels, availableModels]);
 
   // Calculate dynamic width based on model names
   const dynamicWidth = useMemo(() => {
@@ -50,31 +78,32 @@ export function ModelSelector({
     return calculatedWidth;
   }, [availableModels]);
 
-  // Filter and sort models - only show gpt-oss models for deployment
+  // Filter and organize models based on authentication status
   const filteredModels = useMemo(() => {
-    // First filter for LLM models (exclude image/video generation)
-    let llmModels = availableModels.filter((model) => {
-      const modelId = model.id.toLowerCase();
-      const isLLM =
-        !modelId.includes("dall-e") &&
-        !modelId.includes("midjourney") &&
-        !modelId.includes("stable-diffusion") &&
-        !modelId.includes("imagen") &&
-        !modelId.includes("video");
-      return isLLM;
+    // Get models from our access rules and deduplicate by ID
+    const uniqueModels = new Map<string, ModelForDisplay>();
+    
+    modelAccessRules.forEach(rule => {
+      // Only add if not already present (first occurrence wins)
+      if (!uniqueModels.has(rule.id)) {
+        uniqueModels.set(rule.id, {
+          id: rule.id,
+          name: rule.name,
+          provider: rule.provider,
+          tier: rule.tier,
+          requiresAuth: rule.requiresAuth,
+          description: rule.description,
+          canAccess: canAccessModel(rule.id),
+        });
+      }
     });
-
-    // Filter for gpt-oss models only for deployment
-    let gptOssModels = llmModels.filter((model) => {
-      const modelId = model.id.toLowerCase();
-      const modelName = model.name.toLowerCase();
-      return modelId.includes("gpt-oss") || modelName.includes("gpt-oss");
-    });
+    
+    let modelsToShow: ModelForDisplay[] = Array.from(uniqueModels.values());
 
     // Apply search query filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
-      gptOssModels = gptOssModels.filter(
+      modelsToShow = modelsToShow.filter(
         (model) =>
           model.id.toLowerCase().includes(query) ||
           model.name.toLowerCase().includes(query) ||
@@ -82,52 +111,53 @@ export function ModelSelector({
       );
     }
 
-    // Sort gpt-oss models alphabetically
-    const sortedGptOssModels = gptOssModels.sort((a, b) => a.name.localeCompare(b.name));
-
-    // Add "Coming soon" placeholders if no search query
-    if (!searchQuery) {
-      const comingSoonModels = [
-        {
-          id: "coming-soon-claude",
-          name: "Claude Models (Coming Soon)",
-          provider: "Anthropic",
-          disabled: true,
-        },
-        {
-          id: "coming-soon-gpt",
-          name: "GPT Models (Coming Soon)", 
-          provider: "OpenAI",
-          disabled: true,
-        },
-        {
-          id: "coming-soon-gemini",
-          name: "Gemini Models (Coming Soon)",
-          provider: "Google",
-          disabled: true,
-        },
-      ];
-      return [...sortedGptOssModels, ...comingSoonModels];
-    }
-
-    return sortedGptOssModels;
-  }, [availableModels, searchQuery]);
+    // Sort: accessible models first, then by name
+    return modelsToShow.sort((a, b) => {
+      if (a.canAccess !== b.canAccess) {
+        return a.canAccess ? -1 : 1; // Accessible models first
+      }
+      if (a.tier !== b.tier) {
+        return a.tier === 'free' ? -1 : 1; // Free models first within same access level
+      }
+      return a.name.localeCompare(b.name);
+    });
+  }, [availableModels, searchQuery, canAccessModel, auth.user.tier]);
 
   return (
-    <div className={className}>
-      <Select value={value} onValueChange={onChange}>
+    <TooltipProvider>
+      <div className={className}>
+        <Select value={value} onValueChange={(newValue) => {
+          // Check if user can access this model
+          const hasAccess = canAccessModel(newValue);
+          const needsAuth = shouldPromptForAuth(newValue);
+          
+          console.log('Model selection:', { newValue, hasAccess, needsAuth });
+          
+          if (!hasAccess && needsAuth) {
+            // Show auth modal for premium models
+            console.log('Showing auth modal for premium model:', newValue);
+            setAuthModal(true, 'premium-model');
+            return;
+          }
+          
+          // Allow selection if user has access
+          onChange(newValue);
+        }}>
         <SelectTrigger style={{ width: `${dynamicWidth}px` }}>
           <SelectValue placeholder={placeholder}>
             {value &&
               (() => {
-                const selectedModel = availableModels.find(
+                const accessRules = ModelAccessControl.getAllRules();
+                const selectedModel = accessRules.find(
                   (m) => m.id === value,
-                );
+                ) || availableModels.find(m => m.id === value);
                 return selectedModel ? (
                   <div className="flex items-center justify-between w-full">
-                    <span className="font-medium">{selectedModel.name}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="font-medium">{selectedModel.name}</span>
+                    </div>
                     <span className="text-xs text-muted-foreground ml-2">
-                      {selectedModel.provider}
+                      {typeof selectedModel.provider === 'string' ? selectedModel.provider : selectedModel.provider}
                     </span>
                   </div>
                 ) : (
@@ -164,30 +194,73 @@ export function ModelSelector({
                 )}
               </div>
             ) : (
-              filteredModels.map((model) => (
-                <SelectItem 
-                  key={model.id} 
-                  value={model.id}
-                  disabled={(model as any).disabled}
-                >
-                  <div className="flex items-center justify-between w-full min-w-0">
-                    <div className="flex flex-col items-start min-w-0 flex-1 pr-2">
-                      <span className={`font-medium text-sm text-left break-words ${
-                        (model as any).disabled ? 'text-muted-foreground' : ''
-                      }`}>
-                        {model.name}
-                      </span>
-                      <span className="text-xs text-muted-foreground text-left break-words">
-                        {model.provider}
-                      </span>
+              filteredModels.map((model) => {
+                const isLocked = !model.canAccess;
+                const ModelItem = (
+                  <SelectItem 
+                    key={model.id} 
+                    value={model.id}
+                    disabled={isLocked}
+                    className={isLocked ? 'opacity-60' : ''}
+                  >
+                    <div className="flex items-center justify-between w-full min-w-0">
+                      <div className="flex flex-col items-start min-w-0 flex-1 pr-2">
+                        <div className="flex items-center gap-2 w-full">
+                          <span className={`font-medium text-sm text-left break-words ${
+                            isLocked ? 'text-muted-foreground' : ''
+                          }`}>
+                            {model.name}
+                          </span>
+                          {isLocked && (
+                            <Lock className="w-3 h-3 text-muted-foreground" />
+                          )}
+                        </div>
+                        <div className="flex items-center justify-between w-full">
+                          <span className="text-xs text-muted-foreground text-left break-words">
+                            {model.provider}
+                          </span>
+                          {model.description && (
+                            <span className="text-xs text-muted-foreground text-right truncate ml-2">
+                              {model.description}
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                </SelectItem>
-              ))
+                  </SelectItem>
+                );
+
+                // Wrap locked premium models with tooltip
+                if (isLocked && model.requiresAuth) {
+                  return (
+                    <Tooltip key={model.id}>
+                      <TooltipTrigger asChild className="w-full">
+                        <div onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          console.log('Premium model clicked:', model.id);
+                          setAuthModal(true, 'premium-model');
+                        }}>
+                          {ModelItem}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent side="left" className="max-w-xs">
+                        <p className="text-sm font-medium">Login and use all premium models for free!</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {model.description || `Access ${model.name} and other premium models.`}
+                        </p>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                }
+
+                return ModelItem;
+              })
             )}
           </div>
         </SelectContent>
-      </Select>
-    </div>
+        </Select>
+      </div>
+    </TooltipProvider>
   );
 }

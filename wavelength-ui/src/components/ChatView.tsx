@@ -25,9 +25,9 @@ export function ChatView() {
     return (
       <div className="chat-messages flex-1 overflow-y-auto p-6 flex items-center justify-center">
         <div className="text-center text-muted-foreground">
-          <div className="text-lg mb-2 font-mono">AI</div>
-          <p className="font-semibold mb-1">Minimal AI Chat Interface</p>
-          <p className="text-sm">True parallel processing with o3 Pro, o3, and Grok 4</p>
+          <div className="text-lg mb-2 font-mono">Wavelength</div>
+          <p className="font-semibold mb-1">Universal AI Chat Interface</p>
+          <p className="text-sm">Access premium models like o3, Claude, and Gemini for free</p>
           <p className="text-xs mt-2">Create a new chat to get started</p>
         </div>
       </div>

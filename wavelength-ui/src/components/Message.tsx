@@ -42,6 +42,15 @@ export function Message({ role, content, timestamp, model, reasoning, tokens, co
           : 'ai self-start bg-card border border-border p-3 mr-8'
       }`}
     >
+      {/* Reasoning display for AI messages - FIRST */}
+      {!isUser && reasoning && (
+        <div className="text-xs font-mono text-muted-foreground mb-3 bg-muted p-2 rounded max-h-[200px] overflow-y-auto">
+          <div className="font-semibold mb-1">Reasoning:</div>
+          <div className="whitespace-pre-wrap">{reasoning}</div>
+        </div>
+      )}
+      
+      {/* Main content - SECOND */}
       <div className={isUser ? "whitespace-pre-wrap" : ""}>
         {isUser ? (
           content
@@ -157,14 +166,6 @@ export function Message({ role, content, timestamp, model, reasoning, tokens, co
           </ReactMarkdown>
         )}
       </div>
-      
-      {/* Reasoning display for AI messages */}
-      {!isUser && reasoning && (
-        <div className="text-xs font-mono text-muted-foreground mt-2 bg-muted p-2 rounded max-h-[200px] overflow-y-auto">
-          <div className="font-semibold mb-1">Reasoning:</div>
-          <div className="whitespace-pre-wrap">{reasoning}</div>
-        </div>
-      )}
 
       {/* Usage information for AI messages */}
       {!isUser && (config.showTokens || config.showCosts) && (tokens || cost !== undefined || duration) && (

@@ -7,6 +7,8 @@ import { Send } from 'lucide-react';
 import { useStore, useActiveChat } from '../lib/store';
 import { sendMessageToServer } from '../lib/api';
 import { ModelSelector } from './ModelSelector';
+import { MessageLimitWarning } from './auth/MessageLimitWarning';
+import { AnonymousSessionManager } from '../lib/auth/anonymous-session';
 
 export function ChatInput() {
   const [message, setMessage] = useState('');
@@ -18,7 +20,12 @@ export function ChatInput() {
     createNewChat, 
     activeChatId, 
     config, 
-    updateConfig 
+    updateConfig,
+    auth,
+    canAccessModel,
+    shouldPromptForAuth,
+    setAuthModal,
+    incrementMessageCount
   } = useStore();
   const activeChat = useActiveChat();
 
@@ -61,6 +68,21 @@ export function ChatInput() {
       return;
     }
     
+    // Check if user has reached daily limit
+    if (auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit()) {
+      setAuthModal(true, 'daily-limit');
+      return;
+    }
+    
+    // Check if user can access the selected model
+    const modelToUse = selectedModel || activeChat?.model || config.defaultModel;
+    if (!canAccessModel(modelToUse)) {
+      if (shouldPromptForAuth(modelToUse)) {
+        setAuthModal(true, 'premium-model');
+        return;
+      }
+    }
+    
     const messageContent = message.trim();
     setMessage('');
     setIsLoading(true);
@@ -75,11 +97,22 @@ export function ChatInput() {
         chatId = createNewChat(config.defaultModel);
       }
 
+      // Increment message count for anonymous users
+      const reachedLimit = incrementMessageCount();
+      
       // Send message to server
       const { setChatStatus } = useStore.getState();
       await sendMessageToServer(messageContent, chatId, selectedModel || activeChat?.model || config.defaultModel, setChatStatus);
       
       console.log('Message sent successfully');
+      
+      // Check if user reached limit after sending
+      if (reachedLimit) {
+        // Show upgrade prompt after a delay to let the message complete
+        setTimeout(() => {
+          setAuthModal(true, 'daily-limit');
+        }, 1000);
+      }
     } catch (error) {
       console.error('Failed to send message:', error);
       
@@ -106,8 +139,15 @@ export function ChatInput() {
     element.style.height = Math.min(element.scrollHeight, 200) + 'px';
   };
 
+  const isDisabled = isLoading || (
+    auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit()
+  );
+
   return (
     <div className="chat-input-area p-4 border-t border-border bg-background">
+      {/* Daily limit warning */}
+      <MessageLimitWarning className="mb-3" />
+      
       {error && (
         <div className="mb-2 p-2 bg-red-100 border border-red-300 rounded text-red-700 text-sm">
           {error}
@@ -139,14 +179,20 @@ export function ChatInput() {
             adjustTextareaHeight(e.target);
           }}
           onKeyDown={handleKeyDown}
-          placeholder={activeChatId ? "Type your message..." : "Start a new conversation..."}
+          placeholder={
+            auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit()
+              ? "Daily limit reached. Sign in to continue..."
+              : activeChatId 
+                ? "Type your message..." 
+                : "Start a new conversation..."
+          }
           className="flex-1 bg-input border border-border p-3 font-mono text-foreground resize-none min-h-[2.5rem] max-h-[200px] transition-colors focus:border-ring"
           rows={1}
-          disabled={isLoading}
+          disabled={isDisabled}
         />
         <Button
           onClick={handleSendMessage}
-          disabled={!message.trim() || isLoading}
+          disabled={!message.trim() || isDisabled}
           className="bg-primary text-primary-foreground border-none p-3 cursor-pointer font-mono transition-all duration-100 flex items-center justify-center hover:scale-105 hover:opacity-90 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
         >
           {isLoading ? (
@@ -159,7 +205,9 @@ export function ChatInput() {
       
       <div className="flex items-center justify-between mt-2 text-xs text-muted-foreground">
         <span>
-          {activeChatId ? (
+          {auth.user.sessionType === 'anonymous' && AnonymousSessionManager.hasReachedLimit() ? (
+            'Daily limit reached. Sign in for 500 messages/day + premium models'
+          ) : activeChatId ? (
             <>
               Ready for parallel sessions • Using {selectedModel?.split('/')[1] || selectedModel || 'default'}
             </>
