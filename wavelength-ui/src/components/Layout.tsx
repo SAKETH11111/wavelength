@@ -26,7 +26,7 @@ export function Layout() {
   return (
     <div className="h-screen w-full flex overflow-hidden bg-background text-foreground">
       {/* Sidebar */}
-      <div className={`${!isSidebarOpen ? 'sidebar collapsed -translate-x-full -mr-[280px]' : ''}`}>
+      <div className={`w-[280px] h-full bg-sidebar border-r border-border flex flex-col transition-transform duration-300 ease-out ${!isSidebarOpen ? 'collapsed -translate-x-full -mr-[280px]' : ''}`}>
         <Sidebar />
       </div>
       

@@ -37,7 +37,7 @@ export function Sidebar() {
     deleteChat(chatId);
   };
   return (
-    <div className="w-[280px] h-full bg-[var(--sidebar)] border-r border-border flex flex-col transition-transform duration-300 ease-out">
+    <div className="h-full bg-sidebar flex flex-col">
       {/* New Chat Button */}
       <Button
         className="bg-primary text-primary-foreground border-none p-3 m-4 cursor-pointer font-mono font-medium transition-all duration-150 flex items-center justify-center gap-2 hover:scale-105 hover:opacity-90 active:scale-95"
